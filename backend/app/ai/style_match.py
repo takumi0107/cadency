@@ -6,6 +6,8 @@ import re
 from typing import TypedDict
 
 from google import genai
+from google.genai import types
+from pydantic import BaseModel
 
 
 class StyleInput(TypedDict):
@@ -14,7 +16,7 @@ class StyleInput(TypedDict):
     tempo: float | int
 
 
-class GenerationResult(TypedDict):
+class GenerationResult(BaseModel):
     progression: list[str]
     description: str
     theory_note: str

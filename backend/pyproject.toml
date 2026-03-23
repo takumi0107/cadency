@@ -13,6 +13,7 @@ dependencies = [
     "google-genai",
     "python-dotenv",
     "httpx",
+    "pydantic>=2.12.5",
 ]
 
 [dependency-groups]

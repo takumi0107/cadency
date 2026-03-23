@@ -147,32 +147,41 @@ cadency/
 - Node.js 20+
 - Gemini API key — get one free at [Google AI Studio](https://aistudio.google.com/)
 
-### Backend
+### Setup
 
 ```bash
-cd backend
-cp .env.example .env
-# add your GEMINI_API_KEY to .env
+cp backend/.env.example backend/.env
+# add your GEMINI_API_KEY to backend/.env
 
-uv sync
-uv run uvicorn app.main:app --reload --port 8000
+make install
 ```
 
-API available at `http://localhost:8000` — docs at `http://localhost:8000/docs`.
-
-### Frontend
+### Run (both servers at once)
 
 ```bash
-cd frontend
-npm install
-npm run dev
+make dev
 ```
 
-Open `http://localhost:3000`.
+Backend at `http://localhost:8000` (docs at `/docs`) — Frontend at `http://localhost:3000`.
+
+Press `Ctrl+C` to stop both.
+
+### Make targets
+
+| Command | Description |
+|---|---|
+| `make dev` | Start backend + frontend together |
+| `make dev-backend` | Backend only |
+| `make dev-frontend` | Frontend only |
+| `make test` | Run all tests |
+| `make test-backend` | pytest (backend) |
+| `make test-frontend` | lint (frontend) |
+| `make lint` | Lint both |
+| `make install` | Install all dependencies |
 
 ### With devcontainer (recommended)
 
-Open the repo in VS Code → **Reopen in Container**. ffmpeg, uv, and Node are all pre-installed. Then run the backend and frontend commands above.
+Open the repo in VS Code → **Reopen in Container**. ffmpeg, uv, and Node are all pre-installed. Then run `make install && make dev`.
 
 ---
 
