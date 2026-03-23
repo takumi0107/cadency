@@ -2,6 +2,7 @@
 
 import { ChordSuggestion } from "@/lib/api";
 import ChordPlayer from "./ChordPlayer";
+import PianoChord from "./PianoChord";
 
 interface SuggestionPanelProps {
   suggestions: ChordSuggestion[];
@@ -29,10 +30,7 @@ export default function SuggestionPanel({ suggestions }: SuggestionPanelProps) {
           }}
         >
           <div className="flex items-center justify-between mb-2">
-            <span
-              className="text-2xl font-bold"
-              style={{ color: "#22d3ee" }}
-            >
+            <span className="text-2xl font-bold" style={{ color: "#22d3ee" }}>
               {s.chord}
             </span>
             <div className="flex items-center gap-2">
@@ -49,9 +47,10 @@ export default function SuggestionPanel({ suggestions }: SuggestionPanelProps) {
               <ChordPlayer chord={s.chord} />
             </div>
           </div>
-          <p className="text-sm leading-relaxed" style={{ color: "#d1d5db" }}>
+          <p className="text-sm leading-relaxed mb-3" style={{ color: "#d1d5db" }}>
             {s.reason}
           </p>
+          <PianoChord chord={s.chord} />
         </div>
       ))}
     </div>

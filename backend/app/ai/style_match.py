@@ -6,7 +6,6 @@ import re
 from typing import TypedDict
 
 from google import genai
-from google.genai import types
 from pydantic import BaseModel
 
 
@@ -59,7 +58,6 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
     )
     raw = response.text.strip()
 
-    # Strip markdown code fences if present
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
