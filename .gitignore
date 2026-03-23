@@ -32,6 +32,21 @@ out/
 /dist
 coverage/
 
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+
+# Temp audio files (yt-dlp downloads)
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.opus
+
+# Alembic
+alembic/__pycache__/
+
 # Misc
 .DS_Store
 *.pem
