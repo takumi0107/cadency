@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --background: #07070f;
+  --foreground: #f9fafb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: #07070f;
+  color: #f9fafb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input::placeholder {
+  color: #4b5563;
+}
+
+input:focus {
+  border-color: rgba(96, 165, 250, 0.5) !important;
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.2);
+}
