@@ -5,8 +5,10 @@ import { parseChord, getInversions, NOTE_NAMES } from "@/lib/chords";
 
 interface PianoRollProps {
   chords: string[];
+  customNotes?: (number[] | null)[];
   playingIndex?: number | null;
   onTranspose?: (barIdx: number, semitones: number) => void;
+  onTransposeNote?: (barIdx: number, noteIdx: number, semitones: number) => void;
 }
 
 const ROW_H = 13;
@@ -14,19 +16,22 @@ const BAR_W = 150;
 const PIANO_W = 44;
 const IS_BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
 
-export default function PianoRoll({ chords, playingIndex, onTranspose }: PianoRollProps) {
-  const [drag, setDrag] = useState<{ barIdx: number; offset: number } | null>(null);
+export default function PianoRoll({ chords, customNotes, playingIndex, onTranspose, onTransposeNote }: PianoRollProps) {
+  const [drag, setDrag] = useState<{ barIdx: number; noteIdx: number; offset: number } | null>(null);
 
   if (chords.length === 0) return null;
 
-  const baseNotes: number[][] = chords.map(chord => {
+  const baseNotes: number[][] = chords.map((chord, i) => {
+    if (customNotes?.[i]) return customNotes[i]!;
     const parsed = parseChord(chord);
     return parsed ? getInversions(parsed)[0].midiNotes : [];
   });
 
-  // During drag, shift notes for the dragged bar for live preview
-  const displayNotes: number[][] = baseNotes.map((notes, i) =>
-    drag?.barIdx === i ? notes.map(m => m + drag.offset) : notes
+  // Apply live drag offset to the specific note being dragged
+  const displayNotes: number[][] = baseNotes.map((notes, barIdx) =>
+    notes.map((midi, noteIdx) =>
+      drag?.barIdx === barIdx && drag?.noteIdx === noteIdx ? midi + drag.offset : midi
+    )
   );
 
   const allMidi = displayNotes.flat();
@@ -43,20 +48,21 @@ export default function PianoRoll({ chords, playingIndex, onTranspose }: PianoRo
   const totalHeight = ROWS * ROW_H;
   const totalWidth = PIANO_W + chords.length * BAR_W;
 
-  const startDrag = (e: React.MouseEvent, barIdx: number) => {
-    if (!onTranspose) return;
+  const startNoteDrag = (e: React.MouseEvent, barIdx: number, noteIdx: number) => {
+    if (!onTransposeNote) return;
     e.preventDefault();
+    e.stopPropagation();
     const startY = e.clientY;
     let currentOffset = 0;
-    setDrag({ barIdx, offset: 0 });
+    setDrag({ barIdx, noteIdx, offset: 0 });
 
     const onMove = (ev: MouseEvent) => {
       currentOffset = -Math.round((ev.clientY - startY) / ROW_H);
-      setDrag({ barIdx, offset: currentOffset });
+      setDrag({ barIdx, noteIdx, offset: currentOffset });
     };
 
     const onUp = () => {
-      if (currentOffset !== 0) onTranspose(barIdx, currentOffset);
+      if (currentOffset !== 0) onTransposeNote(barIdx, noteIdx, currentOffset);
       setDrag(null);
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
@@ -71,29 +77,22 @@ export default function PianoRoll({ chords, playingIndex, onTranspose }: PianoRo
 
       {/* Bar header */}
       <div className="flex" style={{ marginLeft: PIANO_W, borderBottom: "1px solid rgba(96,165,250,0.15)" }}>
-        {chords.map((chord, i) => {
-          const isDragging = drag?.barIdx === i;
-          const label = isDragging && drag.offset !== 0
-            ? `${chord} ${drag.offset > 0 ? "+" : ""}${drag.offset}`
-            : chord;
-          return (
-            <div
-              key={i}
-              className="text-xs font-mono text-center py-1 shrink-0"
-              style={{
-                width: BAR_W,
-                color: isDragging ? "#f9fafb" : playingIndex === i ? "#22d3ee" : "#6b7280",
-                borderLeft: "1px solid rgba(96,165,250,0.15)",
-                background: isDragging
-                  ? "rgba(96,165,250,0.1)"
-                  : playingIndex === i ? "rgba(34,211,238,0.06)" : "transparent",
-                transition: isDragging ? "none" : "all 0.1s",
-              }}
-            >
-              {label}
-            </div>
-          );
-        })}
+        {chords.map((chord, i) => (
+          <div
+            key={i}
+            className="text-xs font-mono text-center py-1 shrink-0"
+            style={{
+              width: BAR_W,
+              color: playingIndex === i ? "#22d3ee" : "#6b7280",
+              borderLeft: "1px solid rgba(96,165,250,0.15)",
+              background: playingIndex === i ? "rgba(34,211,238,0.06)" : "transparent",
+              transition: "all 0.1s",
+            }}
+          >
+            {chord}
+            {customNotes?.[i] && <span style={{ color: "#60a5fa", marginLeft: 3 }}>✦</span>}
+          </div>
+        ))}
       </div>
 
       {/* Roll */}
@@ -164,31 +163,33 @@ export default function PianoRoll({ chords, playingIndex, onTranspose }: PianoRo
           )}
 
           {/* Note blocks */}
-          {displayNotes.map((notes, barIdx) => {
-            const isDragging = drag?.barIdx === barIdx;
-            return notes.map((midi, noteIdx) => {
+          {displayNotes.map((notes, barIdx) =>
+            notes.map((midi, noteIdx) => {
               const rowIdx = MIDI_TOP - 1 - midi;
               if (rowIdx < 0 || rowIdx >= ROWS) return null;
               const noteName = NOTE_NAMES[midi % 12];
+              const isDraggingThis = drag?.barIdx === barIdx && drag?.noteIdx === noteIdx;
               return (
                 <div
                   key={`n-${barIdx}-${noteIdx}`}
-                  onMouseDown={e => startDrag(e, barIdx)}
+                  onMouseDown={e => startNoteDrag(e, barIdx, noteIdx)}
                   style={{
                     position: "absolute",
                     left: PIANO_W + barIdx * BAR_W + 2,
                     top: rowIdx * ROW_H + 1,
                     width: BAR_W - 4,
                     height: ROW_H - 2,
-                    background: isDragging
+                    background: isDraggingThis
                       ? "rgba(96,165,250,0.9)"
                       : playingIndex === barIdx
                         ? "rgba(34,211,238,0.85)"
-                        : "rgba(134,239,172,0.65)",
+                        : customNotes?.[barIdx]
+                          ? "rgba(167,139,250,0.7)"
+                          : "rgba(134,239,172,0.65)",
                     borderRadius: 2,
                     display: "flex", alignItems: "center", paddingLeft: 4,
-                    cursor: onTranspose ? "ns-resize" : "default",
-                    transition: isDragging ? "none" : "background 0.1s",
+                    cursor: onTransposeNote ? "ns-resize" : "default",
+                    transition: isDraggingThis ? "none" : "background 0.1s",
                     userSelect: "none",
                   }}
                 >
@@ -197,14 +198,14 @@ export default function PianoRoll({ chords, playingIndex, onTranspose }: PianoRo
                   </span>
                 </div>
               );
-            });
-          })}
+            })
+          )}
         </div>
       </div>
 
-      {onTranspose && (
+      {onTransposeNote && (
         <p className="text-center py-1 text-xs font-mono" style={{ color: "#374151", borderTop: "1px solid rgba(96,165,250,0.08)" }}>
-          drag notes ↑↓ to transpose
+          drag individual notes ↑↓ to edit · ✦ = customized
         </p>
       )}
     </div>

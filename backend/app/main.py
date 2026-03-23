@@ -305,6 +305,27 @@ async def save_progression(
     )
 
 
+@app.patch("/progressions/{prog_id}", response_model=ProgressionResponse)
+async def rename_progression(
+    prog_id: int,
+    body: dict,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    cadency_sid: str | None = Cookie(default=None),
+):
+    """Rename a saved progression."""
+    db_session = await get_or_create_session(response, db, cadency_sid)
+    name = body.get("name", "").strip() or "Untitled"
+    prog = await crud.rename_progression(db, prog_id, db_session.id, name)
+    if not prog:
+        raise HTTPException(status_code=404, detail="Progression not found")
+    return ProgressionResponse(
+        id=prog.id, name=prog.name, chords=prog.chords, key=prog.key, mood=prog.mood,
+        bpm=prog.bpm, description=prog.description, theory_note=prog.theory_note,
+        created_at=prog.created_at.isoformat(),
+    )
+
+
 @app.delete("/progressions/{prog_id}", status_code=204)
 async def delete_progression(
     prog_id: int,

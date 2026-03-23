@@ -10,6 +10,7 @@ import {
 import { parseChord, getInversions, transposeChord, NOTE_NAMES } from "@/lib/chords";
 import { downloadMidi } from "@/lib/midi";
 import { saveProgression, SavedProgression } from "@/lib/api";
+import { SoundPreset, SOUND_PRESETS, SYNTH_PRESETS, getPianoSampler } from "@/lib/sounds";
 import SuggestionPanel from "./SuggestionPanel";
 import PianoChord from "./PianoChord";
 import PianoRoll from "./PianoRoll";
@@ -42,16 +43,27 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
+  const [progressionName, setProgressionName] = useState("");
+  const [sound, setSound] = useState<SoundPreset>(() => {
+    if (typeof window === "undefined") return "piano";
+    return (localStorage.getItem("cadency_sound") as SoundPreset) ?? "piano";
+  });
+  const [customChordNotes, setCustomChordNotes] = useState<(number[] | null)[]>([]);
 
   const stopRef = useRef(false);
   const loopingRef = useRef(looping);
   loopingRef.current = looping;
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
+  const customChordNotesRef = useRef(customChordNotes);
+  customChordNotesRef.current = customChordNotes;
 
   // Sync edited progression when a new result arrives
   useEffect(() => {
-    if (generationResult) setEditedProgression(generationResult.progression);
+    if (generationResult) {
+      setEditedProgression(generationResult.progression);
+      setCustomChordNotes(new Array(generationResult.progression.length).fill(null));
+    }
   }, [generationResult]);
 
   // Load a saved progression from the saved-progressions panel
@@ -59,6 +71,8 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
     if (!loadedProgression) return;
     setEditedProgression(loadedProgression.chords);
     setBpm(loadedProgression.bpm);
+    setProgressionName(loadedProgression.name === "Untitled" ? "" : loadedProgression.name);
+    setCustomChordNotes(new Array(loadedProgression.chords.length).fill(null));
     setGenerationResult({
       progression: loadedProgression.chords,
       description: loadedProgression.description,
@@ -72,6 +86,26 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
       next[i] = transposeChord(prev[i], semitones);
       return next;
     });
+    setCustomChordNotes(prev => {
+      if (!prev[i]) return prev;
+      const next = [...prev];
+      next[i] = prev[i]!.map(m => m + semitones);
+      return next;
+    });
+  };
+
+  const handleTransposeNote = (barIdx: number, noteIdx: number, semitones: number) => {
+    setCustomChordNotes(prev => {
+      const next = [...prev];
+      const base = next[barIdx] ?? (() => {
+        const parsed = parseChord(editedProgression[barIdx]);
+        return parsed ? getInversions(parsed)[0].midiNotes : [];
+      })();
+      const updated = [...base];
+      updated[noteIdx] = base[noteIdx] + semitones;
+      next[barIdx] = updated;
+      return next;
+    });
   };
 
   const handlePlayAll = async () => {
@@ -80,6 +114,7 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
     setPlayingAll(true);
     const Tone = await import("tone");
     await Tone.start();
+    const pianoSampler = sound === "piano" ? await getPianoSampler(Tone) : null;
 
     let go = true;
     while (go) {
@@ -87,18 +122,22 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
         if (stopRef.current) { go = false; break; }
         setPlayingIndex(i);
         const barMs = (60_000 / bpmRef.current) * 4;
-        const parsed = parseChord(editedProgression[i]);
-        const notes = parsed ? getInversions(parsed)[0].midiNotes.map(midiToTone) : [];
+        const rawNotes = customChordNotesRef.current[i] ?? (() => {
+          const parsed = parseChord(editedProgression[i]);
+          return parsed ? getInversions(parsed)[0].midiNotes : [];
+        })();
+        const notes = rawNotes.map(midiToTone);
         if (notes.length > 0) {
-          const synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: "triangle" },
-            envelope: { attack: 0.02, decay: 0.3, sustain: 0.4, release: 1.5 },
-            volume: -10,
-          }).toDestination();
-          synth.triggerAttackRelease(notes, "1n");
-          await new Promise(r => setTimeout(r, barMs * 0.92));
-          synth.dispose();
-          await new Promise(r => setTimeout(r, barMs * 0.08));
+          if (pianoSampler) {
+            pianoSampler.triggerAttackRelease(notes, "1n");
+            await new Promise(r => setTimeout(r, barMs));
+          } else {
+            const synth = new Tone.PolySynth(Tone.Synth, SYNTH_PRESETS[sound as Exclude<typeof sound, "piano">].options).toDestination();
+            synth.triggerAttackRelease(notes, "1n");
+            await new Promise(r => setTimeout(r, barMs * 0.92));
+            synth.dispose();
+            await new Promise(r => setTimeout(r, barMs * 0.08));
+          }
         }
       }
       if (!loopingRef.current || stopRef.current) go = false;
@@ -133,6 +172,7 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
     setSaving(true);
     try {
       await saveProgression({
+        name: progressionName.trim() || "Untitled",
         chords: editedProgression,
         key: key || "",
         mood: styleContext || "",
@@ -160,6 +200,17 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
         4
       );
       setGenerationResult(result);
+      // Auto-save to history
+      await saveProgression({
+        name: progressionName.trim() || "Untitled",
+        chords: result.progression,
+        key: key || "",
+        mood: styleContext || "",
+        bpm,
+        description: result.description,
+        theory_note: result.theory_note,
+      });
+      onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
     } finally {
@@ -231,9 +282,19 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
         >
           {/* Header row */}
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <h3 className="text-xs font-mono uppercase tracking-widest" style={{ color: "#9ca3af" }}>
-              Generated Progression
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-mono uppercase tracking-widest" style={{ color: "#9ca3af" }}>
+                Generated Progression
+              </h3>
+              <input
+                type="text"
+                value={progressionName}
+                onChange={e => setProgressionName(e.target.value)}
+                placeholder="Name…"
+                className="px-2 py-0.5 rounded text-xs font-mono outline-none"
+                style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(96,165,250,0.2)", color: "#f9fafb", width: 110 }}
+              />
+            </div>
             <div className="flex items-center gap-2">
               {/* Loop */}
               <button
@@ -250,8 +311,11 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
               </button>
               {/* Reset */}
               <button
-                onClick={() => setEditedProgression(generationResult.progression)}
-                disabled={editedProgression.join() === generationResult.progression.join()}
+                onClick={() => {
+                  setEditedProgression(generationResult.progression);
+                  setCustomChordNotes(new Array(generationResult.progression.length).fill(null));
+                }}
+                disabled={editedProgression.join() === generationResult.progression.join() && customChordNotes.every(n => n === null)}
                 title="Reset to original"
                 className="flex items-center gap-1 px-2 h-8 rounded-lg text-xs font-mono transition-all disabled:opacity-30"
                 style={{ background: "transparent", border: "1px solid rgba(96,165,250,0.25)", color: "#6b7280" }}
@@ -270,7 +334,7 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
                   color: savedMsg ? "#4ade80" : "#6b7280",
                 }}
               >
-                {savedMsg ? "✓ Saved" : saving ? "Saving…" : "Save"}
+                {savedMsg ? "✓ Saved" : saving ? "Saving…" : "Save edits"}
               </button>
               {/* MIDI export */}
               <button
@@ -302,6 +366,25 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
                 {playingAll ? "Stop" : "Play all"}
               </button>
             </div>
+          </div>
+
+          {/* Sound selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono w-12 shrink-0" style={{ color: "#9ca3af" }}>SOUND</span>
+            {(Object.keys(SOUND_PRESETS) as SoundPreset[]).map(preset => (
+              <button
+                key={preset}
+                onClick={() => { setSound(preset); localStorage.setItem("cadency_sound", preset); }}
+                className="px-2 py-1 rounded text-xs font-mono transition-all"
+                style={{
+                  background: sound === preset ? "rgba(96,165,250,0.18)" : "transparent",
+                  border: `1px solid ${sound === preset ? "rgba(96,165,250,0.5)" : "rgba(96,165,250,0.15)"}`,
+                  color: sound === preset ? "#60a5fa" : "#6b7280",
+                }}
+              >
+                {SOUND_PRESETS[preset].label}
+              </button>
+            ))}
           </div>
 
           {/* BPM slider */}
@@ -361,12 +444,18 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
           </div>
 
           {/* Piano roll */}
-          <PianoRoll chords={editedProgression} playingIndex={playingIndex} onTranspose={handleTranspose} />
+          <PianoRoll
+            chords={editedProgression}
+            customNotes={customChordNotes}
+            playingIndex={playingIndex}
+            onTranspose={handleTranspose}
+            onTransposeNote={handleTransposeNote}
+          />
 
           {/* Piano for selected chord */}
           {selectedChord && (
             <div className="pt-1">
-              <PianoChord chord={selectedChord} />
+              <PianoChord chord={selectedChord} sound={sound} />
             </div>
           )}
 

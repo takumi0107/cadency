@@ -141,3 +141,13 @@ export async function deleteProgression(id: number): Promise<void> {
   });
   if (!res.ok) throw new Error("Delete failed");
 }
+
+export async function renameProgression(id: number, name: string): Promise<void> {
+  const res = await fetch(`${BASE}/progressions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("Rename failed");
+}

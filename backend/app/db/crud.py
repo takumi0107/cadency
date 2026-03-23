@@ -60,3 +60,13 @@ async def delete_progression(db: AsyncSession, prog_id: int, session_id: str) ->
     await db.delete(prog)
     await db.commit()
     return True
+
+
+async def rename_progression(db: AsyncSession, prog_id: int, session_id: str, name: str) -> Progression | None:
+    prog = await get_progression(db, prog_id, session_id)
+    if not prog:
+        return None
+    prog.name = name
+    await db.commit()
+    await db.refresh(prog)
+    return prog

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { parseChord, getInversions, NOTE_NAMES } from "@/lib/chords";
+import { SoundPreset, SOUND_PRESETS, SYNTH_PRESETS, getPianoSampler } from "@/lib/sounds";
 
 const KEY_LAYOUT = [
   { isBlack: false, whitePos: 0 },
@@ -30,9 +31,10 @@ function midiToTone(midi: number): string {
 
 interface PianoChordProps {
   chord: string;
+  sound?: SoundPreset;
 }
 
-export default function PianoChord({ chord }: PianoChordProps) {
+export default function PianoChord({ chord, sound = "piano" }: PianoChordProps) {
   const [inversionIdx, setInversionIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
 
@@ -45,13 +47,15 @@ export default function PianoChord({ chord }: PianoChordProps) {
     const Tone = await import("tone");
     await Tone.start();
     const notes = inversions[inversionIdx].midiNotes.map(midiToTone);
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: "triangle" },
-      envelope: { attack: 0.02, decay: 0.3, sustain: 0.4, release: 1.5 },
-      volume: -10,
-    }).toDestination();
-    synth.triggerAttackRelease(notes, "2n");
-    setTimeout(() => { synth.dispose(); setPlaying(false); }, 2500);
+    if (sound === "piano") {
+      const sampler = await getPianoSampler(Tone);
+      sampler.triggerAttackRelease(notes, "2n");
+      setTimeout(() => setPlaying(false), 2500);
+    } else {
+      const synth = new Tone.PolySynth(Tone.Synth, SYNTH_PRESETS[sound].options).toDestination();
+      synth.triggerAttackRelease(notes, "2n");
+      setTimeout(() => { synth.dispose(); setPlaying(false); }, 2500);
+    }
   }, [playing, inversions, inversionIdx]);
 
   if (!parsed || inversions.length === 0) return null;

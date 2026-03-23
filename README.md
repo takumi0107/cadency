@@ -1,6 +1,6 @@
 # Cadency
 
-AI-powered chord assistant for music producers. Paste a YouTube link to analyze a track's harmonic style, then get chord suggestions with music theory explanations.
+AI-powered chord assistant for music producers. Paste a YouTube link to analyze a track's harmonic style, then generate and edit chord progressions — complete with piano roll visualization, MIDI export, and sound playback.
 
 **Live demo:** <!-- add URL after deploy -->
 
@@ -9,10 +9,12 @@ AI-powered chord assistant for music producers. Paste a YouTube link to analyze 
 ## What it does
 
 ### Track Analysis
-Paste any YouTube URL → Cadency downloads the audio, analyzes it, and extracts:
+Paste any YouTube URL → Cadency downloads the audio, analyzes it with librosa, and extracts:
 - Key and scale (e.g. F minor, Aeolian)
 - Tempo (BPM)
-- Mood and energy (e.g. melancholic, dark & heavy, bright & upbeat)
+- Mood and energy level
+
+Results are **cached in SQLite** — analyzing the same video twice returns instantly.
 
 ### "What fits next?"
 Enter the chords you have so far. Cadency suggests 3 possible next chords — each with a plain English reason and a music theory label.
@@ -25,8 +27,38 @@ Cadency:   G   — perfect authentic cadence, resolves back to Am       (VII →
            Dm  — builds gentle tension before resolving                (iv → i)
 ```
 
-### Style-matched generation
-Use the style extracted from a track to generate a full chord progression inspired by the same harmonic DNA.
+### Style-matched progression generation
+Generates a full chord progression matching the key, mood, and tempo extracted from a track (or entered manually). Each generation is **automatically saved** to your session history.
+
+### Piano roll editor
+Every generated progression is shown in an FL Studio-style piano roll. You can:
+- **Drag individual notes** up/down to customize a chord's voicing independently of the other notes
+- **Transpose entire chords** with the ↑/↓ buttons above each bar
+- Bars with custom note edits are marked with a **✦** indicator
+
+### Sound selector
+Choose the synth tone used for playback:
+
+| Preset | Oscillator | Character |
+|---|---|---|
+| Piano | Triangle | Natural, warm decay |
+| Warm | Sine | Smooth, long release |
+| Bright | Sawtooth | Punchy, edgy |
+| Organ | Square | Sustained, electronic |
+
+### Playback controls
+- **Play all** — plays through the progression bar by bar
+- **Loop** — repeats continuously until stopped
+- **BPM slider** — 40–200 BPM, adjustable live during playback
+
+### MIDI export
+Exports the current (edited) progression as a `.mid` file using binary MIDI encoding — no external library.
+
+### Progression history
+Every generated progression is saved to a **per-session SQLite database** (cookie-based, no login required). From the history panel you can:
+- **Load** any saved progression back into the editor
+- **Rename** progressions with an inline pencil editor
+- **Delete** entries
 
 ---
 
@@ -36,6 +68,8 @@ Use the style extracted from a track to generate a full chord progression inspir
 |---|---|
 | Backend | Python 3.12 + FastAPI |
 | Package manager | uv |
+| Database | SQLite + SQLAlchemy 2.0 async + aiosqlite |
+| Migrations | Alembic |
 | Audio download | yt-dlp |
 | Audio analysis | librosa |
 | Music theory | music21 |
@@ -54,26 +88,38 @@ Use the style extracted from a track to generate a full chord progression inspir
 cadency/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI routes
+│   │   ├── main.py              # FastAPI routes + lifespan
+│   │   ├── db/
+│   │   │   ├── base.py          # DeclarativeBase
+│   │   │   ├── engine.py        # async engine + WAL mode init
+│   │   │   ├── models.py        # sessions, analyses, progressions tables
+│   │   │   ├── crud.py          # DB query helpers
+│   │   │   └── deps.py          # get_db + get_or_create_session
 │   │   ├── analyzer/
-│   │   │   ├── youtube.py       # yt-dlp download + librosa analysis
-│   │   │   └── audio.py         # key/tempo/mood extraction
+│   │   │   ├── youtube.py       # yt-dlp download + progress callbacks
+│   │   │   └── audio.py         # key/tempo/mood extraction via librosa
 │   │   └── ai/
 │   │       ├── suggest.py       # "what fits next" — Gemini
 │   │       └── style_match.py   # style-based progression generation
+│   ├── alembic/                 # DB migrations
 │   ├── pyproject.toml
 │   └── Dockerfile
 ├── frontend/
 │   ├── app/
 │   ├── components/
-│   │   ├── URLAnalyzer.tsx      # YouTube input + analysis results
-│   │   ├── ChordInput.tsx       # progression input + suggest/generate
-│   │   ├── SuggestionPanel.tsx  # 3 chord suggestions with explanations
-│   │   └── ChordPlayer.tsx      # Tone.js chord playback
+│   │   ├── URLAnalyzer.tsx      # YouTube input + SSE progress stream
+│   │   ├── ChordInput.tsx       # progression editor, playback, sound selector
+│   │   ├── SuggestionPanel.tsx  # 3 chord suggestions with piano viewer
+│   │   ├── PianoChord.tsx       # interactive piano keyboard + inversion selector
+│   │   ├── PianoRoll.tsx        # FL Studio-style piano roll with per-note drag
+│   │   ├── ChordPlayer.tsx      # Tone.js single-chord playback button
+│   │   └── SavedProgressions.tsx # session history with inline rename
 │   └── lib/
-│       └── api.ts               # typed backend API calls
-└── .devcontainer/
-    └── devcontainer.json        # Python 3.12 + Node 20 + ffmpeg + uv
+│       ├── api.ts               # typed backend API calls
+│       ├── chords.ts            # chord parsing, inversions, transposition
+│       ├── midi.ts              # binary MIDI file generation
+│       └── sounds.ts            # synth preset definitions
+└── Makefile
 ```
 
 ---
@@ -83,9 +129,14 @@ cadency/
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/` | Health check |
-| `POST` | `/analyze` | Analyze a YouTube URL |
+| `POST` | `/analyze` | Analyze a YouTube URL (cached by video ID) |
+| `POST` | `/analyze/stream` | Same, with SSE progress events |
 | `POST` | `/suggest` | Suggest next chords for a progression |
 | `POST` | `/generate` | Generate a progression from a style |
+| `GET` | `/progressions` | List saved progressions for this session |
+| `POST` | `/progressions` | Save a progression |
+| `PATCH` | `/progressions/{id}` | Rename a progression |
+| `DELETE` | `/progressions/{id}` | Delete a progression |
 
 ### `POST /analyze`
 ```json
@@ -113,11 +164,7 @@ cadency/
 ```json
 {
   "suggestions": [
-    {
-      "chord": "G",
-      "reason": "Creates a perfect authentic cadence resolving back to Am.",
-      "theory": "VII → i"
-    }
+    { "chord": "G", "reason": "Creates a perfect authentic cadence.", "theory": "VII → i" }
   ]
 }
 ```
@@ -135,6 +182,45 @@ cadency/
   "description": "Minor key loop with bVI and bVII — common in lo-fi hip hop",
   "theory_note": "Db and Ab are borrowed from the parallel major"
 }
+```
+
+### `GET /progressions`
+Returns all progressions saved in the current browser session (identified by `cadency_sid` cookie).
+```json
+[
+  {
+    "id": 1,
+    "name": "Lo-fi loop",
+    "chords": ["Am", "F", "C", "G"],
+    "key": "A minor",
+    "mood": "melancholic",
+    "bpm": 90,
+    "description": "...",
+    "theory_note": "...",
+    "created_at": "2026-03-23T10:00:00"
+  }
+]
+```
+
+---
+
+## Database
+
+Three tables managed with SQLAlchemy 2.0 async + Alembic:
+
+| Table | Purpose |
+|---|---|
+| `sessions` | Anonymous browser sessions (UUID cookie) |
+| `analyses` | Cached YouTube analysis results, keyed by video ID |
+| `progressions` | Saved chord progressions per session |
+
+SQLite runs in **WAL mode** for better concurrent read performance. No login required — sessions are created automatically on first request.
+
+To create or apply migrations:
+```bash
+cd backend
+uv run alembic revision --autogenerate -m "description"
+uv run alembic upgrade head
 ```
 
 ---
@@ -175,15 +261,11 @@ Press `Ctrl+C` to stop both.
 | `make dev` | Start backend + frontend together |
 | `make dev-backend` | Backend only |
 | `make dev-frontend` | Frontend only |
+| `make kill` | Kill anything running on ports 8000 and 3000 |
 | `make test` | Run all tests |
 | `make test-backend` | pytest (backend) |
 | `make test-frontend` | lint (frontend) |
-| `make lint` | Lint both |
 | `make install` | Install all dependencies |
-
-### With devcontainer (recommended)
-
-Open the repo in VS Code → **Reopen in Container**. ffmpeg, uv, and Node are all pre-installed. Then run `make install && make dev`.
 
 ---
 
@@ -205,7 +287,4 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 - [ ] Spotify support (audio features API — no download needed)
 - [ ] SoundCloud support (yt-dlp already supports it)
-- [ ] Piano roll visualization
-- [ ] Save and export progressions as MIDI
-- [ ] Progression history per session
-# cadency
+- [ ] Per-session progression sharing via short URL
