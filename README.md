@@ -150,6 +150,8 @@ cadency/
 ### Setup
 
 ```bash
+brew install ffmpeg  # required for YouTube audio extraction
+
 cp backend/.env.example backend/.env
 # add your GEMINI_API_KEY to backend/.env
 

@@ -1,6 +1,7 @@
 """YouTube audio download using yt-dlp and librosa-based analysis."""
 
 import os
+import shutil
 import tempfile
 from typing import TypedDict
 
@@ -28,6 +29,8 @@ def _download_audio(url: str, output_path: str) -> str:
     Download best audio from a YouTube URL as mp3 to output_path.
     Returns the actual file path written (yt-dlp appends extension).
     """
+    ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+    ffmpeg_dir = os.path.dirname(ffmpeg_bin)
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
@@ -38,8 +41,8 @@ def _download_audio(url: str, output_path: str) -> str:
                 "preferredquality": "192",
             }
         ],
-        "quiet": True,
-        "no_warnings": True,
+        "ffmpeg_location": ffmpeg_dir,
+        "noplaylist": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -49,25 +52,33 @@ def _download_audio(url: str, output_path: str) -> str:
     return title
 
 
-def analyze_youtube_url(url: str) -> AnalysisResult:
+def analyze_youtube_url(url: str, on_progress=None) -> AnalysisResult:
     """
     Download audio from a YouTube URL, analyze it with librosa, then delete the temp file.
     Returns combined track metadata + audio analysis.
+    on_progress(status, data) is called at each step if provided.
     """
+    def _emit(status: str, data=None):
+        print(f"[analyze] {status}: {data}", flush=True)
+        if on_progress:
+            on_progress(status, data)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         base_path = os.path.join(tmpdir, "audio")
-        # yt-dlp will write base_path.mp3 after post-processing
+        _emit("downloading", url)
         title = _download_audio(url, base_path)
+        _emit("downloaded", title)
 
         mp3_path = base_path + ".mp3"
         if not os.path.exists(mp3_path):
-            # Fallback: find whatever file was written
             files = os.listdir(tmpdir)
             if not files:
                 raise RuntimeError("yt-dlp did not produce an output file")
             mp3_path = os.path.join(tmpdir, files[0])
 
+        _emit("analyzing", title)
         analysis: AudioAnalysis = analyze_audio(mp3_path)
+        _emit("complete", title)
 
     return AnalysisResult(
         title=title,

@@ -4,9 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import asyncio
+import json
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.analyzer.youtube import analyze_youtube_url
 from app.ai.suggest import suggest_next_chord, SuggestionResult
@@ -84,6 +89,39 @@ async def analyze(request: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/analyze/stream")
+async def analyze_stream(request: AnalyzeRequest):
+    """SSE endpoint — streams progress events then the final result."""
+    async def event_generator():
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_event_loop()
+
+        def on_progress(status: str, data):
+            loop.call_soon_threadsafe(queue.put_nowait, {"status": status, "data": data})
+
+        def run():
+            try:
+                result = analyze_youtube_url(str(request.url), on_progress=on_progress)
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"status": "done", "result": dict(result)}
+                )
+            except Exception as exc:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait, {"status": "error", "error": str(exc)}
+                )
+
+        executor = ThreadPoolExecutor(max_workers=1)
+        loop.run_in_executor(executor, run)
+
+        while True:
+            event = await queue.get()
+            yield f"data: {json.dumps(event)}\n\n"
+            if event["status"] in ("done", "error"):
+                break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.post("/suggest", response_model=SuggestResponse)
 async def suggest(request: SuggestRequest):
     """Return 3 chord suggestions that fit after the given progression."""
@@ -108,6 +146,6 @@ async def generate(request: GenerateRequest):
             tempo=request.style.get("tempo", 120),
         )
         result: GenerationResult = generate_progression(style=style, length=request.length)
-        return GenerateResponse(**result)
+        return GenerateResponse(**result.model_dump())
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
