@@ -3,10 +3,20 @@
 import { useState } from "react";
 import URLAnalyzer from "@/components/URLAnalyzer";
 import ChordInput from "@/components/ChordInput";
+import SavedProgressions from "@/components/SavedProgressions";
+import { SavedProgression } from "@/lib/api";
 
 export default function Home() {
   const [prefillStyle, setPrefillStyle] = useState("");
   const [prefillKey, setPrefillKey] = useState("");
+  const [savedTrigger, setSavedTrigger] = useState(0);
+  const [loadedProgression, setLoadedProgression] = useState<SavedProgression | null>(null);
+
+  const handleLoad = (prog: SavedProgression) => {
+    setLoadedProgression(prog);
+    setPrefillKey(prog.key);
+    setPrefillStyle(prog.mood);
+  };
 
   return (
     <main className="min-h-screen relative" style={{ background: "#07070f", color: "#f9fafb" }}>
@@ -33,7 +43,13 @@ export default function Home() {
 
         <div className="space-y-6">
           <URLAnalyzer onUseStyle={(style, key) => { setPrefillStyle(style); setPrefillKey(key); }} />
-          <ChordInput prefillStyle={prefillStyle} prefillKey={prefillKey} />
+          <ChordInput
+            prefillStyle={prefillStyle}
+            prefillKey={prefillKey}
+            loadedProgression={loadedProgression}
+            onSaved={() => setSavedTrigger(t => t + 1)}
+          />
+          <SavedProgressions onLoad={handleLoad} refreshTrigger={savedTrigger} />
         </div>
       </div>
     </main>

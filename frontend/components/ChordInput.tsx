@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import { parseChord, getInversions, transposeChord, NOTE_NAMES } from "@/lib/chords";
 import { downloadMidi } from "@/lib/midi";
+import { saveProgression, SavedProgression } from "@/lib/api";
 import SuggestionPanel from "./SuggestionPanel";
 import PianoChord from "./PianoChord";
 import PianoRoll from "./PianoRoll";
@@ -20,9 +21,11 @@ function midiToTone(midi: number): string {
 interface ChordInputProps {
   prefillStyle?: string;
   prefillKey?: string;
+  onSaved?: () => void;
+  loadedProgression?: SavedProgression | null;
 }
 
-export default function ChordInput({ prefillStyle = "", prefillKey = "" }: ChordInputProps) {
+export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved, loadedProgression }: ChordInputProps) {
   const [progression, setProgression] = useState("");
   const [key, setKey] = useState(prefillKey);
   const [styleContext, setStyleContext] = useState(prefillStyle);
@@ -37,6 +40,8 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "" }: Chord
   const [looping, setLooping] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState(false);
 
   const stopRef = useRef(false);
   const loopingRef = useRef(looping);
@@ -48,6 +53,18 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "" }: Chord
   useEffect(() => {
     if (generationResult) setEditedProgression(generationResult.progression);
   }, [generationResult]);
+
+  // Load a saved progression from the saved-progressions panel
+  useEffect(() => {
+    if (!loadedProgression) return;
+    setEditedProgression(loadedProgression.chords);
+    setBpm(loadedProgression.bpm);
+    setGenerationResult({
+      progression: loadedProgression.chords,
+      description: loadedProgression.description,
+      theory_note: loadedProgression.theory_note,
+    });
+  }, [loadedProgression]);
 
   const handleTranspose = (i: number, semitones: number) => {
     setEditedProgression(prev => {
@@ -108,6 +125,28 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "" }: Chord
       setError(err instanceof Error ? err.message : "Suggestion failed");
     } finally {
       setLoadingSuggest(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!generationResult || editedProgression.length === 0) return;
+    setSaving(true);
+    try {
+      await saveProgression({
+        chords: editedProgression,
+        key: key || "",
+        mood: styleContext || "",
+        bpm,
+        description: generationResult.description,
+        theory_note: generationResult.theory_note,
+      });
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
+      onSaved?.();
+    } catch {
+      setError("Failed to save progression");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -218,6 +257,20 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "" }: Chord
                 style={{ background: "transparent", border: "1px solid rgba(96,165,250,0.25)", color: "#6b7280" }}
               >
                 ↺ Reset
+              </button>
+              {/* Save */}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                title="Save progression"
+                className="flex items-center gap-1 px-2 h-8 rounded-lg text-xs font-mono transition-all disabled:opacity-40"
+                style={{
+                  background: savedMsg ? "rgba(34,197,94,0.15)" : "transparent",
+                  border: `1px solid ${savedMsg ? "rgba(34,197,94,0.5)" : "rgba(96,165,250,0.25)"}`,
+                  color: savedMsg ? "#4ade80" : "#6b7280",
+                }}
+              >
+                {savedMsg ? "✓ Saved" : saving ? "Saving…" : "Save"}
               </button>
               {/* MIDI export */}
               <button
