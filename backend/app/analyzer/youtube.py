@@ -53,7 +53,7 @@ def _download_audio(url: str, output_path: str) -> str:
         ],
         "ffmpeg_location": ffmpeg_dir,
         "noplaylist": True,
-        "extractor_args": {"youtube": {"player_client": ["ios", "android"]}},
+        "extractor_args": {"youtube": {"player_client": ["web"]}},
     }
     if cookies_file:
         ydl_opts["cookiefile"] = cookies_file
