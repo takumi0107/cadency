@@ -5,8 +5,6 @@ import shutil
 import tempfile
 from typing import TypedDict
 
-import yt_dlp
-
 from app.analyzer.audio import AudioAnalysis, analyze_audio
 
 
@@ -45,6 +43,7 @@ def _download_audio(url: str, output_path: str) -> str:
         "noplaylist": True,
     }
 
+    import yt_dlp
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         title: str = info.get("title", "Unknown Track")  # type: ignore[union-attr]

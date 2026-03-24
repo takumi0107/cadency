@@ -1,7 +1,5 @@
 """Audio analysis helpers using librosa for key, tempo, energy, and mood extraction."""
 
-import numpy as np
-import librosa
 from typing import TypedDict
 
 
@@ -13,27 +11,30 @@ class AudioAnalysis(TypedDict):
     mood: str
 
 
-# Krumhansl–Schmuckler key profiles
-MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09,
-                           2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53,
-                           2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+# Krumhansl–Schmuckler key profiles (plain lists; converted to np.array on first use)
+MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
-def _detect_key(y: np.ndarray, sr: int) -> tuple[str, str]:
+def _detect_key(y, sr: int) -> tuple[str, str]:
     """Detect musical key and scale (major/minor) using chroma features."""
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    import numpy as np
+    import librosa as _librosa
+
+    chroma = _librosa.feature.chroma_cqt(y=y, sr=sr)
     chroma_mean = chroma.mean(axis=1)
 
     best_score = -np.inf
+    major = np.array(MAJOR_PROFILE)
+    minor = np.array(MINOR_PROFILE)
     best_note = 0
     best_scale = "major"
 
     for i in range(12):
-        rotated_major = np.roll(MAJOR_PROFILE, i)
-        rotated_minor = np.roll(MINOR_PROFILE, i)
+        rotated_major = np.roll(major, i)
+        rotated_minor = np.roll(minor, i)
 
         score_major = np.corrcoef(chroma_mean, rotated_major)[0, 1]
         score_minor = np.corrcoef(chroma_mean, rotated_minor)[0, 1]
@@ -74,6 +75,9 @@ def analyze_audio(file_path: str) -> AudioAnalysis:
     Analyze an audio file and return key, scale, tempo, energy, and mood.
     Only processes the first 60 seconds for speed.
     """
+    import numpy as np
+    import librosa
+
     y, sr = librosa.load(file_path, mono=True, duration=60.0)
 
     # Key detection
