@@ -30,7 +30,7 @@ def _download_audio(url: str, output_path: str) -> str:
     ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
     ffmpeg_dir = os.path.dirname(ffmpeg_bin)
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": output_path,
         "postprocessors": [
             {
