@@ -5,7 +5,6 @@ import os
 import re
 from typing import TypedDict
 
-from google import genai
 from pydantic import BaseModel
 
 
@@ -21,7 +20,8 @@ class GenerationResult(BaseModel):
     theory_note: str
 
 
-def _get_client() -> genai.Client:
+def _get_client():
+    from google import genai
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY environment variable is not set")

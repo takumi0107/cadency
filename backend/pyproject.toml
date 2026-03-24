@@ -9,7 +9,6 @@ dependencies = [
     "yt-dlp",
     "librosa",
     "numpy",
-    "music21",
     "google-genai",
     "python-dotenv",
     "httpx",

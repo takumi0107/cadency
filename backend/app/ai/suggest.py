@@ -5,8 +5,6 @@ import os
 import re
 from typing import TypedDict
 
-from google import genai
-
 
 class ChordSuggestion(TypedDict):
     chord: str
@@ -18,7 +16,8 @@ class SuggestionResult(TypedDict):
     suggestions: list[ChordSuggestion]
 
 
-def _get_client() -> genai.Client:
+def _get_client():
+    from google import genai
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY environment variable is not set")
