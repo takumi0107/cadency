@@ -8,6 +8,17 @@ from typing import TypedDict
 from app.analyzer.audio import AudioAnalysis, analyze_audio
 
 
+def _write_cookies_file(tmpdir: str) -> str | None:
+    """Write YOUTUBE_COOKIES env var to a temp file. Returns path or None."""
+    cookies = os.environ.get("YOUTUBE_COOKIES", "").strip()
+    if not cookies:
+        return None
+    path = os.path.join(tmpdir, "cookies.txt")
+    with open(path, "w") as f:
+        f.write(cookies)
+    return path
+
+
 class TrackInfo(TypedDict):
     title: str
     file_path: str
@@ -29,6 +40,7 @@ def _download_audio(url: str, output_path: str) -> str:
     """
     ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
     ffmpeg_dir = os.path.dirname(ffmpeg_bin)
+    cookies_file = _write_cookies_file(os.path.dirname(output_path))
     ydl_opts = {
         "format": "bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": output_path,
@@ -43,6 +55,8 @@ def _download_audio(url: str, output_path: str) -> str:
         "noplaylist": True,
         "extractor_args": {"youtube": {"player_client": ["ios"]}},
     }
+    if cookies_file:
+        ydl_opts["cookiefile"] = cookies_file
 
     import yt_dlp
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
