@@ -42,7 +42,7 @@ def _download_audio(url: str, output_path: str) -> str:
     ffmpeg_dir = os.path.dirname(ffmpeg_bin)
     cookies_file = _write_cookies_file(os.path.dirname(output_path))
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "format": "bestaudio/best",
         "outtmpl": output_path,
         "postprocessors": [
             {
@@ -53,7 +53,7 @@ def _download_audio(url: str, output_path: str) -> str:
         ],
         "ffmpeg_location": ffmpeg_dir,
         "noplaylist": True,
-        "extractor_args": {"youtube": {"player_client": ["ios"]}},
+        "extractor_args": {"youtube": {"player_client": ["web", "ios"]}},
     }
     if cookies_file:
         ydl_opts["cookiefile"] = cookies_file
