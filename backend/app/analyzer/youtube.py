@@ -1,27 +1,11 @@
-"""YouTube audio download using yt-dlp and librosa-based analysis."""
+"""YouTube metadata fetch using YouTube Data API v3 + Gemini-based analysis."""
 
+import json
 import os
-import shutil
-import tempfile
+import re
 from typing import TypedDict
 
-from app.analyzer.audio import AudioAnalysis, analyze_audio
-
-
-def _write_cookies_file(tmpdir: str) -> str | None:
-    """Write YOUTUBE_COOKIES env var to a temp file. Returns path or None."""
-    cookies = os.environ.get("YOUTUBE_COOKIES", "").strip()
-    if not cookies:
-        return None
-    path = os.path.join(tmpdir, "cookies.txt")
-    with open(path, "w") as f:
-        f.write(cookies)
-    return path
-
-
-class TrackInfo(TypedDict):
-    title: str
-    file_path: str
+import httpx
 
 
 class AnalysisResult(TypedDict):
@@ -33,43 +17,67 @@ class AnalysisResult(TypedDict):
     mood: str
 
 
-def _download_audio(url: str, output_path: str) -> str:
-    """
-    Download best audio from a YouTube URL as mp3 to output_path.
-    Returns the actual file path written (yt-dlp appends extension).
-    """
-    ffmpeg_bin = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
-    ffmpeg_dir = os.path.dirname(ffmpeg_bin)
-    cookies_file = _write_cookies_file(os.path.dirname(output_path))
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": output_path,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
-        "ffmpeg_location": ffmpeg_dir,
-        "noplaylist": True,
-        "extractor_args": {"youtube": {"player_client": ["web"]}},
-    }
-    if cookies_file:
-        ydl_opts["cookiefile"] = cookies_file
+def _fetch_video_metadata(video_id: str) -> dict:
+    """Fetch video snippet from YouTube Data API v3."""
+    api_key = os.environ.get("YOUTUBE_API_KEY")
+    if not api_key:
+        raise RuntimeError("YOUTUBE_API_KEY environment variable not set")
 
-    import yt_dlp
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        title: str = info.get("title", "Unknown Track")  # type: ignore[union-attr]
+    resp = httpx.get(
+        "https://www.googleapis.com/youtube/v3/videos",
+        params={"part": "snippet", "id": video_id, "key": api_key},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    if not items:
+        raise RuntimeError(f"Video not found: {video_id}")
+    return items[0]["snippet"]
 
-    return title
+
+def _analyze_with_gemini(title: str, description: str, tags: list[str]) -> dict:
+    """Use Gemini to infer key, scale, tempo, energy, and mood from metadata."""
+    from google import genai
+
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    tags_str = ", ".join(tags[:20]) if tags else "none"
+
+    prompt = f"""You are a music analysis expert. Based on the YouTube video metadata below, determine the musical characteristics of the song.
+
+Title: {title}
+Description (first 500 chars): {description[:500]}
+Tags: {tags_str}
+
+Return ONLY a JSON object with these exact fields:
+- key: root note as a string (e.g. "C", "F#", "Bb")
+- scale: "Ionian" for major keys, "Aeolian" for minor keys
+- tempo: estimated BPM as a number (e.g. 120.0)
+- energy: estimated energy level from 0.0 to 1.0
+- mood: a short mood description (e.g. "melancholic", "upbeat & energetic", "calm & warm", "dark & heavy")
+
+Base your analysis on:
+- Song title keywords (minor, major, sad, happy, dark, ambient, etc.)
+- Genre cues in title/tags (trap, jazz, lo-fi, EDM, classical, etc.)
+- Artist style if recognizable from the title or channel
+- Any musical key or BPM mentioned in the title, description, or tags
+
+Return only valid JSON, no markdown, no explanation."""
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+    )
+
+    text = response.text.strip()
+    # Strip markdown code fences if present
+    text = re.sub(r"^```(?:json)?\n?", "", text)
+    text = re.sub(r"\n?```$", "", text)
+    return json.loads(text)
 
 
 def analyze_youtube_url(url: str, on_progress=None) -> AnalysisResult:
     """
-    Download audio from a YouTube URL, analyze it with librosa, then delete the temp file.
-    Returns combined track metadata + audio analysis.
+    Fetch YouTube metadata and use Gemini to determine key/mood/tempo.
     on_progress(status, data) is called at each step if provided.
     """
     def _emit(status: str, data=None):
@@ -77,28 +85,27 @@ def analyze_youtube_url(url: str, on_progress=None) -> AnalysisResult:
         if on_progress:
             on_progress(status, data)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        base_path = os.path.join(tmpdir, "audio")
-        _emit("downloading", url)
-        title = _download_audio(url, base_path)
-        _emit("downloaded", title)
+    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
+    if not m:
+        raise ValueError(f"Invalid YouTube URL: {url}")
+    video_id = m.group(1)
 
-        mp3_path = base_path + ".mp3"
-        if not os.path.exists(mp3_path):
-            files = os.listdir(tmpdir)
-            if not files:
-                raise RuntimeError("yt-dlp did not produce an output file")
-            mp3_path = os.path.join(tmpdir, files[0])
+    _emit("fetching", url)
+    snippet = _fetch_video_metadata(video_id)
+    title: str = snippet.get("title", "Unknown Track")
+    description: str = snippet.get("description", "")
+    tags: list[str] = snippet.get("tags", [])
+    _emit("fetched", title)
 
-        _emit("analyzing", title)
-        analysis: AudioAnalysis = analyze_audio(mp3_path)
-        _emit("complete", title)
+    _emit("analyzing", title)
+    analysis = _analyze_with_gemini(title, description, tags)
+    _emit("complete", title)
 
     return AnalysisResult(
         title=title,
-        key=analysis["key"],
-        scale=analysis["scale"],
-        tempo=analysis["tempo"],
-        energy=analysis["energy"],
-        mood=analysis["mood"],
+        key=analysis.get("key", "C"),
+        scale=analysis.get("scale", "Ionian"),
+        tempo=float(analysis.get("tempo", 120.0)),
+        energy=float(analysis.get("energy", 0.5)),
+        mood=analysis.get("mood", "neutral"),
     )

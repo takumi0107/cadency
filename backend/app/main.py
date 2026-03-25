@@ -4,24 +4,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import asyncio
-import json
 import re
 from contextlib import asynccontextmanager
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analyzer.youtube import analyze_youtube_url
 from app.ai.suggest import suggest_next_chord, SuggestionResult
 from app.ai.style_match import generate_progression, StyleInput, GenerationResult
-from app.db.engine import init_db, AsyncSessionLocal
+from app.db.engine import init_db
 from app.db.deps import get_db, get_or_create_session
-from app.db.models import Session as DbSession
 from app.db import crud
 
 
@@ -141,11 +136,10 @@ async def analyze(
     db: AsyncSession = Depends(get_db),
     cadency_sid: str | None = Cookie(default=None),
 ):
-    """Download audio from a YouTube URL and return audio analysis (cached by video ID)."""
+    """Fetch YouTube metadata and use Gemini to determine key/mood/tempo (cached by video ID)."""
     db_session = await get_or_create_session(response, db, cadency_sid)
     video_id = extract_video_id(str(request.url))
 
-    # Return cached result if available
     if video_id:
         cached = await crud.get_analysis_by_video_id(db, video_id)
         if cached:
@@ -163,73 +157,6 @@ async def analyze(
         await crud.create_analysis(db, db_session.id, video_id, result)
 
     return AnalyzeResponse(**result)
-
-
-@app.post("/analyze/stream")
-async def analyze_stream(
-    request: AnalyzeRequest,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    cadency_sid: str | None = Cookie(default=None),
-):
-    """SSE endpoint — streams progress events then the final result."""
-    db_session = await get_or_create_session(response, db, cadency_sid)
-    video_id = extract_video_id(str(request.url))
-
-    # Return cached result immediately if available
-    if video_id:
-        cached = await crud.get_analysis_by_video_id(db, video_id)
-        if cached:
-            data = {
-                "status": "done",
-                "result": {
-                    "title": cached.title, "key": cached.key, "scale": cached.scale,
-                    "tempo": cached.tempo, "energy": cached.energy, "mood": cached.mood,
-                },
-                "cached": True,
-            }
-            async def cached_stream():
-                yield f"data: {json.dumps({'status': 'progress', 'data': {'step': 'cache', 'message': 'Loaded from cache'}})}\n\n"
-                yield f"data: {json.dumps(data)}\n\n"
-            return StreamingResponse(cached_stream(), media_type="text/event-stream")
-
-    session_id = db_session.id
-
-    async def event_generator():
-        queue: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_event_loop()
-
-        def on_progress(status: str, data):
-            loop.call_soon_threadsafe(queue.put_nowait, {"status": status, "data": data})
-
-        def run():
-            try:
-                result = analyze_youtube_url(str(request.url), on_progress=on_progress)
-                loop.call_soon_threadsafe(
-                    queue.put_nowait, {"status": "done", "result": dict(result)}
-                )
-            except Exception as exc:
-                loop.call_soon_threadsafe(
-                    queue.put_nowait, {"status": "error", "error": str(exc)}
-                )
-
-        executor = ThreadPoolExecutor(max_workers=1)
-        loop.run_in_executor(executor, run)
-
-        while True:
-            event = await queue.get()
-            yield f"data: {json.dumps(event)}\n\n"
-            if event["status"] == "done":
-                # Cache the result
-                result = event.get("result", {})
-                if video_id and result:
-                    async with AsyncSessionLocal() as save_db:
-                        await crud.create_analysis(save_db, session_id, video_id, result)
-                break
-            if event["status"] == "error":
-                break
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ---------------------------------------------------------------------------
