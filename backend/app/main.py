@@ -158,10 +158,12 @@ async def auth_google(
     cadency_sid: str | None = Cookie(default=None),
 ):
     """Return the Google OAuth URL — frontend navigates there directly."""
-    state = secrets.token_urlsafe(16)
+    random_token = secrets.token_urlsafe(16)
     db_session = await get_or_create_session(response, db, cadency_sid)
-    db_session.oauth_state = state
+    db_session.oauth_state = random_token
     await db.commit()
+    # Encode session_id + random token into state so callback doesn't need cookies
+    state = f"{db_session.id}:{random_token}"
     return {"url": get_oauth_url(state)}
 
 
@@ -171,13 +173,17 @@ async def auth_google_callback(
     state: str,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    cadency_sid: str | None = Cookie(default=None),
 ):
-    """Handle Google OAuth callback, create/update user, link to session."""
-    db_session = await get_or_create_session(response, db, cadency_sid)
-    if not db_session.oauth_state or state != db_session.oauth_state:
+    """Handle Google OAuth callback — session ID is embedded in state, no cookie needed."""
+    try:
+        session_id, random_token = state.split(":", 1)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    db_session.oauth_state = None  # consume the state
+
+    db_session = await db.get(DbSession, session_id)
+    if not db_session or db_session.oauth_state != random_token:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    db_session.oauth_state = None  # consume
 
     try:
         tokens = exchange_code(code)
@@ -195,6 +201,16 @@ async def auth_google_callback(
 
     db_session.user_id = user.id
     await db.commit()
+
+    # Re-set the session cookie so the browser has it after the redirect
+    response.set_cookie(
+        key="cadency_sid",
+        value=db_session.id,
+        max_age=60 * 60 * 24 * 365,
+        httponly=True,
+        samesite="none",
+        secure=True,
+    )
 
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     return RedirectResponse(url=frontend_url)
