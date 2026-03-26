@@ -18,6 +18,7 @@ def get_oauth_url(state: str) -> str:
         "scope": "openid email profile",
         "state": state,
         "access_type": "online",
+        "prompt": "select_account",
     }
     return f"{_AUTH_URL}?{urlencode(params)}"
 
