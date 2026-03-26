@@ -171,7 +171,6 @@ async def auth_google(
 async def auth_google_callback(
     code: str,
     state: str,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Handle Google OAuth callback — session ID is embedded in state, no cookie needed."""
@@ -202,8 +201,9 @@ async def auth_google_callback(
     db_session.user_id = user.id
     await db.commit()
 
-    # Re-set the session cookie so the browser has it after the redirect
-    response.set_cookie(
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    redirect = RedirectResponse(url=frontend_url)
+    redirect.set_cookie(
         key="cadency_sid",
         value=db_session.id,
         max_age=60 * 60 * 24 * 365,
@@ -211,9 +211,7 @@ async def auth_google_callback(
         samesite="none",
         secure=True,
     )
-
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    return RedirectResponse(url=frontend_url)
+    return redirect
 
 
 @app.get("/auth/me")

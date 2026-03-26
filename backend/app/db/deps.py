@@ -41,7 +41,8 @@ async def get_or_create_session(
         value=db_session.id,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        samesite="none",
+        secure=True,
     )
     return db_session
 
