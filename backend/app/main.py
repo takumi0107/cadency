@@ -135,6 +135,22 @@ async def health_check():
 # Auth endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/auth/debug")
+async def auth_debug():
+    """Show OAuth config for debugging — remove before going live."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "NOT SET")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "NOT SET")
+    frontend_url = os.environ.get("FRONTEND_URL", "NOT SET")
+    state = "debug"
+    oauth_url = get_oauth_url(state) if client_id != "NOT SET" and redirect_uri != "NOT SET" else "cannot build — env vars missing"
+    return {
+        "GOOGLE_CLIENT_ID": client_id,
+        "GOOGLE_REDIRECT_URI": redirect_uri,
+        "FRONTEND_URL": frontend_url,
+        "oauth_url_that_would_be_sent": oauth_url,
+    }
+
+
 @app.get("/auth/google")
 async def auth_google():
     """Redirect to Google OAuth consent screen."""
