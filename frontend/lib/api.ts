@@ -1,5 +1,21 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+const AUTH_KEY = "cadency_auth";
+
+export function saveAuthToken(token: string) {
+  localStorage.setItem(AUTH_KEY, token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem(AUTH_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -49,13 +65,21 @@ export interface GenerationResult {
 // ---------------------------------------------------------------------------
 
 export async function getMe(): Promise<AuthUser | null> {
-  const res = await fetch(`${BASE}/auth/me`, { credentials: "include" });
+  const res = await fetch(`${BASE}/auth/me`, {
+    credentials: "include",
+    headers: { ...authHeaders() },
+  });
   if (!res.ok) return null;
   return res.json();
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
+  await fetch(`${BASE}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+    headers: { ...authHeaders() },
+  });
+  clearAuthToken();
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +89,7 @@ export async function logout(): Promise<void> {
 export async function analyzeTrack(url: string): Promise<AnalysisResult> {
   const res = await fetch(`${BASE}/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify({ url }),
   });
@@ -83,7 +107,7 @@ export async function suggestChords(
 ): Promise<SuggestionResult> {
   const res = await fetch(`${BASE}/suggest`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify({ progression, key, style_context: styleContext }),
   });
@@ -100,7 +124,7 @@ export async function generateProgression(
 ): Promise<GenerationResult> {
   const res = await fetch(`${BASE}/generate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     credentials: "include",
     body: JSON.stringify({ style, length }),
   });

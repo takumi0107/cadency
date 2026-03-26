@@ -10,7 +10,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import date
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -135,21 +135,6 @@ async def health_check():
 # Auth endpoints
 # ---------------------------------------------------------------------------
 
-@app.get("/auth/debug")
-async def auth_debug():
-    """Show OAuth config for debugging — remove before going live."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID", "NOT SET")
-    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "NOT SET")
-    frontend_url = os.environ.get("FRONTEND_URL", "NOT SET")
-    state = "debug"
-    oauth_url = get_oauth_url(state) if client_id != "NOT SET" and redirect_uri != "NOT SET" else "cannot build — env vars missing"
-    return {
-        "GOOGLE_CLIENT_ID": client_id,
-        "GOOGLE_REDIRECT_URI": redirect_uri,
-        "FRONTEND_URL": frontend_url,
-        "oauth_url_that_would_be_sent": oauth_url,
-    }
-
 
 @app.get("/auth/google")
 async def auth_google(
@@ -201,28 +186,23 @@ async def auth_google_callback(
     db_session.user_id = user.id
     await db.commit()
 
+    # Pass the session ID in the URL so Safari (which blocks cross-origin cookies) can store it
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    redirect = RedirectResponse(url=frontend_url)
-    redirect.set_cookie(
-        key="cadency_sid",
-        value=db_session.id,
-        max_age=60 * 60 * 24 * 365,
-        httponly=True,
-        samesite="none",
-        secure=True,
-    )
-    return redirect
+    return RedirectResponse(url=f"{frontend_url}?sid={db_session.id}")
 
 
 @app.get("/auth/me")
 async def auth_me(
     db: AsyncSession = Depends(get_db),
     cadency_sid: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
 ):
     """Return current user info and today's usage, or null if not logged in."""
-    if not cadency_sid:
+    from app.db.deps import _extract_bearer
+    sid = cadency_sid or _extract_bearer(authorization)
+    if not sid:
         return None
-    db_session = await db.get(DbSession, cadency_sid)
+    db_session = await db.get(DbSession, sid)
     if not db_session or not db_session.user_id:
         return None
     user = await db.get(User, db_session.user_id)
@@ -246,10 +226,13 @@ async def auth_logout(
     response: Response,
     db: AsyncSession = Depends(get_db),
     cadency_sid: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
 ):
-    """Unlink the session from the user and clear the session cookie."""
-    if cadency_sid:
-        db_session = await db.get(DbSession, cadency_sid)
+    """Unlink the session from the user."""
+    from app.db.deps import _extract_bearer
+    sid = cadency_sid or _extract_bearer(authorization)
+    if sid:
+        db_session = await db.get(DbSession, sid)
         if db_session:
             db_session.user_id = None
             await db.commit()

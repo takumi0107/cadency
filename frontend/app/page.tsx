@@ -5,7 +5,7 @@ import URLAnalyzer from "@/components/URLAnalyzer";
 import ChordInput from "@/components/ChordInput";
 import SavedProgressions from "@/components/SavedProgressions";
 import AuthButton from "@/components/AuthButton";
-import { SavedProgression, AuthUser, getMe } from "@/lib/api";
+import { SavedProgression, AuthUser, getMe, saveAuthToken } from "@/lib/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -17,6 +17,13 @@ export default function Home() {
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined); // undefined = loading
 
   useEffect(() => {
+    // Pick up session token from URL after OAuth redirect (Safari cross-origin cookie fix)
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("sid");
+    if (sid) {
+      saveAuthToken(sid);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     getMe().then(setUser);
   }, []);
 
