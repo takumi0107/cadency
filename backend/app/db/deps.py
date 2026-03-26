@@ -1,13 +1,13 @@
-"""FastAPI dependencies for database sessions and session management."""
+"""FastAPI dependencies for database sessions, auth, and rate limiting."""
 
 import uuid
 from typing import AsyncGenerator
 
-from fastapi import Cookie, Response
+from fastapi import Cookie, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.engine import AsyncSessionLocal
-from app.db.models import Session as DbSession
+from app.db.models import Session as DbSession, User
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -44,3 +44,27 @@ async def get_or_create_session(
         samesite="lax",
     )
     return db_session
+
+
+async def require_quota(
+    db: AsyncSession = Depends(get_db),
+    cadency_sid: str | None = Cookie(default=None),
+) -> User:
+    """Require an authenticated user and enforce the 20/day rate limit."""
+    if not cadency_sid:
+        raise HTTPException(status_code=401, detail="Sign in to use this feature")
+    db_session = await db.get(DbSession, cadency_sid)
+    if not db_session or not db_session.user_id:
+        raise HTTPException(status_code=401, detail="Sign in to use this feature")
+    user = await db.get(User, db_session.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to use this feature")
+
+    from app.db.crud import check_and_increment_usage
+    count, limit = await check_and_increment_usage(db, user)
+    if count > limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily limit of {limit} uses reached. Resets at midnight.",
+        )
+    return user

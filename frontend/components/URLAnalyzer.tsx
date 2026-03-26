@@ -1,22 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { AnalysisResult } from "@/lib/api";
+import { AnalysisResult, AuthUser } from "@/lib/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface URLAnalyzerProps {
+  user: AuthUser | null;
   onUseStyle: (styleContext: string, key: string) => void;
+  onUsed: () => void;
 }
 
-export default function URLAnalyzer({ onUseStyle }: URLAnalyzerProps) {
+export default function URLAnalyzer({ user, onUseStyle, onUsed }: URLAnalyzerProps) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
-    if (!url.trim()) return;
+    if (!url.trim() || !user) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -35,6 +37,7 @@ export default function URLAnalyzer({ onUseStyle }: URLAnalyzerProps) {
       }
 
       setResult(await res.json());
+      onUsed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
@@ -70,8 +73,9 @@ export default function URLAnalyzer({ onUseStyle }: URLAnalyzerProps) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-          placeholder="Paste a YouTube URL..."
-          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-all"
+          placeholder={user ? "Paste a YouTube URL..." : "Sign in to analyze tracks"}
+          disabled={!user}
+          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-all disabled:opacity-40"
           style={{
             background: "rgba(7,7,15,0.8)",
             border: "1px solid rgba(96,165,250,0.2)",
@@ -80,7 +84,7 @@ export default function URLAnalyzer({ onUseStyle }: URLAnalyzerProps) {
         />
         <button
           onClick={handleAnalyze}
-          disabled={loading || !url.trim()}
+          disabled={loading || !url.trim() || !user}
           className="px-4 py-2 rounded-lg text-sm font-mono font-medium transition-all duration-200 disabled:opacity-40"
           style={{
             background: loading ? "rgba(96,165,250,0.1)" : "rgba(96,165,250,0.15)",

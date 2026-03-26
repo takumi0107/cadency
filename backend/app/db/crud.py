@@ -1,9 +1,54 @@
-"""CRUD helpers for analyses and progressions."""
+"""CRUD helpers for users, analyses, and progressions."""
+
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Analysis, Progression, Session as DbSession
+from app.db.models import Analysis, Progression, Session as DbSession, User
+
+DAILY_LIMIT = 20
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+async def get_user_by_google_id(db: AsyncSession, google_id: str) -> User | None:
+    result = await db.execute(select(User).where(User.google_id == google_id))
+    return result.scalars().first()
+
+
+async def get_or_create_user(
+    db: AsyncSession,
+    google_id: str,
+    email: str,
+    name: str,
+    avatar_url: str | None,
+) -> User:
+    user = await get_user_by_google_id(db, google_id)
+    if user:
+        user.name = name
+        user.avatar_url = avatar_url
+        await db.commit()
+        await db.refresh(user)
+        return user
+    user = User(google_id=google_id, email=email, name=name, avatar_url=avatar_url)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def check_and_increment_usage(db: AsyncSession, user: User) -> tuple[int, int]:
+    """Increment daily usage counter. Returns (new_count, limit). Does NOT raise."""
+    today = date.today().isoformat()
+    if user.usage_date != today:
+        user.usage_count = 0
+        user.usage_date = today
+    user.usage_count += 1
+    await db.commit()
+    return user.usage_count, DAILY_LIMIT
 
 
 # ---------------------------------------------------------------------------

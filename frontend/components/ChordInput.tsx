@@ -23,10 +23,11 @@ interface ChordInputProps {
   prefillStyle?: string;
   prefillKey?: string;
   onSaved?: () => void;
+  onUsed?: () => void;
   loadedProgression?: SavedProgression | null;
 }
 
-export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved, loadedProgression }: ChordInputProps) {
+export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved, onUsed, loadedProgression }: ChordInputProps) {
   const [progression, setProgression] = useState("");
   const [key, setKey] = useState(prefillKey);
   const [styleContext, setStyleContext] = useState(prefillStyle);
@@ -160,6 +161,7 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
     try {
       const result = await suggestChords(chords, key || "unknown", styleContext || "general");
       setSuggestions(result.suggestions);
+      onUsed?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Suggestion failed");
     } finally {
@@ -200,6 +202,7 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
         4
       );
       setGenerationResult(result);
+      onUsed?.();
       // Auto-save to history
       await saveProgression({
         name: progressionName.trim() || "Untitled",

@@ -4,19 +4,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import os
 import re
+import secrets
 from contextlib import asynccontextmanager
+from datetime import date
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analyzer.youtube import analyze_youtube_url
 from app.ai.suggest import suggest_next_chord, SuggestionResult
 from app.ai.style_match import generate_progression, StyleInput, GenerationResult
+from app.auth.google import exchange_code, fetch_user_info, get_oauth_url
 from app.db.engine import init_db
-from app.db.deps import get_db, get_or_create_session
+from app.db.deps import get_db, get_or_create_session, require_quota
+from app.db.models import Session as DbSession, User
 from app.db import crud
 
 
@@ -34,7 +40,7 @@ app = FastAPI(title="Cadency API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://cadency-frontend-production.up.railway.app"],
+    allow_origins=["http://localhost:3000", "https://cadency-production.up.railway.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -126,6 +132,99 @@ async def health_check():
 
 
 # ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/auth/google")
+async def auth_google():
+    """Redirect to Google OAuth consent screen."""
+    state = secrets.token_urlsafe(16)
+    redirect = RedirectResponse(url=get_oauth_url(state))
+    redirect.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="lax")
+    return redirect
+
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(
+    code: str,
+    state: str,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    cadency_sid: str | None = Cookie(default=None),
+    oauth_state: str | None = Cookie(default=None),
+):
+    """Handle Google OAuth callback, create/update user, link to session."""
+    if not oauth_state or state != oauth_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    try:
+        tokens = exchange_code(code)
+        user_info = fetch_user_info(tokens["access_token"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"OAuth failed: {exc}") from exc
+
+    user = await crud.get_or_create_user(
+        db,
+        google_id=user_info["id"],
+        email=user_info["email"],
+        name=user_info["name"],
+        avatar_url=user_info.get("picture"),
+    )
+
+    db_session = await get_or_create_session(response, db, cadency_sid)
+    db_session.user_id = user.id
+    await db.commit()
+
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    redirect = RedirectResponse(url=frontend_url)
+    redirect.delete_cookie("oauth_state")
+    return redirect
+
+
+@app.get("/auth/me")
+async def auth_me(
+    db: AsyncSession = Depends(get_db),
+    cadency_sid: str | None = Cookie(default=None),
+):
+    """Return current user info and today's usage, or null if not logged in."""
+    if not cadency_sid:
+        return None
+    db_session = await db.get(DbSession, cadency_sid)
+    if not db_session or not db_session.user_id:
+        return None
+    user = await db.get(User, db_session.user_id)
+    if not user:
+        return None
+
+    today = date.today().isoformat()
+    usage_today = user.usage_count if user.usage_date == today else 0
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "avatar_url": user.avatar_url,
+        "usage_today": usage_today,
+        "usage_limit": crud.DAILY_LIMIT,
+    }
+
+
+@app.post("/auth/logout")
+async def auth_logout(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    cadency_sid: str | None = Cookie(default=None),
+):
+    """Unlink the session from the user and clear the session cookie."""
+    if cadency_sid:
+        db_session = await db.get(DbSession, cadency_sid)
+        if db_session:
+            db_session.user_id = None
+            await db.commit()
+    response.delete_cookie("cadency_sid")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # Analyze endpoints
 # ---------------------------------------------------------------------------
 
@@ -135,6 +234,7 @@ async def analyze(
     response: Response,
     db: AsyncSession = Depends(get_db),
     cadency_sid: str | None = Cookie(default=None),
+    _: User = Depends(require_quota),
 ):
     """Fetch YouTube metadata and use Gemini to determine key/mood/tempo (cached by video ID)."""
     db_session = await get_or_create_session(response, db, cadency_sid)
@@ -164,7 +264,7 @@ async def analyze(
 # ---------------------------------------------------------------------------
 
 @app.post("/suggest", response_model=SuggestResponse)
-async def suggest(request: SuggestRequest):
+async def suggest(request: SuggestRequest, _: User = Depends(require_quota)):
     """Return 3 chord suggestions that fit after the given progression."""
     try:
         result: SuggestionResult = suggest_next_chord(
@@ -178,7 +278,7 @@ async def suggest(request: SuggestRequest):
 
 
 @app.post("/generate", response_model=GenerateResponse)
-async def generate(request: GenerateRequest):
+async def generate(request: GenerateRequest, _: User = Depends(require_quota)):
     """Generate a chord progression matching the given style."""
     try:
         style = StyleInput(

@@ -26,3 +26,12 @@ async def init_db() -> None:
     async with AsyncSessionLocal() as session:
         await session.execute(text("PRAGMA journal_mode=WAL"))
         await session.commit()
+
+        # Safe migration: add user_id to sessions if not present (existing DBs)
+        try:
+            await session.execute(
+                text("ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id)")
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()  # Column already exists — ignore

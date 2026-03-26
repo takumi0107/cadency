@@ -4,6 +4,15 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  avatar_url: string | null;
+  usage_today: number;
+  usage_limit: number;
+}
+
 export interface AnalysisResult {
   title: string;
   key: string;
@@ -33,6 +42,20 @@ export interface GenerationResult {
   progression: string[];
   description: string;
   theory_note: string;
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export async function getMe(): Promise<AuthUser | null> {
+  const res = await fetch(`${BASE}/auth/me`, { credentials: "include" });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
 }
 
 // ---------------------------------------------------------------------------
