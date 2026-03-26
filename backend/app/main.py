@@ -152,12 +152,11 @@ async def auth_debug():
 
 
 @app.get("/auth/google")
-async def auth_google():
-    """Redirect to Google OAuth consent screen."""
+async def auth_google(response: Response):
+    """Return the Google OAuth URL — frontend navigates there directly."""
     state = secrets.token_urlsafe(16)
-    redirect = RedirectResponse(url=get_oauth_url(state))
-    redirect.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="lax")
-    return redirect
+    response.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="none", secure=True)
+    return {"url": get_oauth_url(state)}
 
 
 @app.get("/auth/google/callback")

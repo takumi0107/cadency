@@ -15,21 +15,26 @@ export default function AuthButton({ user, onLogout }: AuthButtonProps) {
     onLogout();
   };
 
+  const handleLogin = async () => {
+    const res = await fetch(`${BASE}/auth/google`, { credentials: "include" });
+    const { url } = await res.json();
+    window.location.href = url;
+  };
+
   if (!user) {
     return (
-      <a
-        href={`${BASE}/auth/google`}
+      <button
+        onClick={handleLogin}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all duration-200"
         style={{
           background: "rgba(255,255,255,0.05)",
           border: "1px solid rgba(255,255,255,0.12)",
           color: "#9ca3af",
-          textDecoration: "none",
         }}
       >
         <GoogleIcon />
         Sign in
-      </a>
+      </button>
     );
   }
 
