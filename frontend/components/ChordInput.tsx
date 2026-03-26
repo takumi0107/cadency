@@ -2,16 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  suggestChords,
   generateProgression,
-  ChordSuggestion,
   GenerationResult,
 } from "@/lib/api";
 import { parseChord, getInversions, transposeChord, NOTE_NAMES } from "@/lib/chords";
 import { downloadMidi } from "@/lib/midi";
 import { saveProgression, SavedProgression } from "@/lib/api";
 import { SoundPreset, SOUND_PRESETS, SYNTH_PRESETS, getPianoSampler } from "@/lib/sounds";
-import SuggestionPanel from "./SuggestionPanel";
 import PianoChord from "./PianoChord";
 import PianoRoll from "./PianoRoll";
 
@@ -22,19 +19,17 @@ function midiToTone(midi: number): string {
 interface ChordInputProps {
   prefillStyle?: string;
   prefillKey?: string;
+  prefillEnergy?: number;
   onSaved?: () => void;
   onUsed?: () => void;
   loadedProgression?: SavedProgression | null;
 }
 
-export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved, onUsed, loadedProgression }: ChordInputProps) {
-  const [progression, setProgression] = useState("");
+export default function ChordInput({ prefillStyle = "", prefillKey = "", prefillEnergy, onSaved, onUsed, loadedProgression }: ChordInputProps) {
   const [key, setKey] = useState(prefillKey);
   const [styleContext, setStyleContext] = useState(prefillStyle);
-  const [suggestions, setSuggestions] = useState<ChordSuggestion[]>([]);
   const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
   const [editedProgression, setEditedProgression] = useState<string[]>([]);
-  const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [loadingGenerate, setLoadingGenerate] = useState(false);
   const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const [playingAll, setPlayingAll] = useState(false);
@@ -152,23 +147,6 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
   if (prefillStyle && prefillStyle !== styleContext) setStyleContext(prefillStyle);
   if (prefillKey && prefillKey !== key) setKey(prefillKey);
 
-  const handleSuggest = async () => {
-    const chords = progression.trim().split(/[\s,→]+/).filter(Boolean);
-    if (chords.length === 0) return;
-    setLoadingSuggest(true);
-    setError(null);
-    setGenerationResult(null);
-    try {
-      const result = await suggestChords(chords, key || "unknown", styleContext || "general");
-      setSuggestions(result.suggestions);
-      onUsed?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Suggestion failed");
-    } finally {
-      setLoadingSuggest(false);
-    }
-  };
-
   const handleSave = async () => {
     if (!generationResult || editedProgression.length === 0) return;
     setSaving(true);
@@ -195,10 +173,9 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
   const handleGenerate = async () => {
     setLoadingGenerate(true);
     setError(null);
-    setSuggestions([]);
     try {
       const result = await generateProgression(
-        { key: key || "C major", mood: styleContext || "neutral", tempo: bpm },
+        { key: key || "C major", mood: styleContext || "neutral", tempo: bpm, energy: prefillEnergy },
         4
       );
       setGenerationResult(result);
@@ -228,19 +205,6 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
         style={{ border: "1px solid rgba(34,211,238,0.2)", background: "rgba(34,211,238,0.03)" }}
       >
         <div className="p-4 space-y-3">
-          {/* Fields */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono" style={{ color: "#9ca3af" }}>
-              Your chords <span style={{ color: "#9ca3af" }}>— type a progression to get "what fits next" suggestions</span>
-            </label>
-            <input
-              type="text" value={progression} onChange={(e) => setProgression(e.target.value)}
-              placeholder="e.g.  Am  F  C  G"
-              className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
-              style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(34,211,238,0.15)", color: "#f9fafb" }}
-            />
-          </div>
-
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs font-mono" style={{ color: "#9ca3af" }}>Key</label>
@@ -262,41 +226,23 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="space-y-1">
-              <button
-                onClick={handleSuggest} disabled={loadingSuggest || !progression.trim()}
-                className="w-full px-3 py-2.5 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
-                style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa" }}
-              >
-                {loadingSuggest ? "Thinking..." : "What fits next?"}
-              </button>
-              <p className="text-xs font-mono px-1" style={{ color: "#9ca3af" }}>AI suggests 3 chords that follow your progression</p>
-            </div>
-            <div className="space-y-1">
-              <button
-                onClick={handleGenerate} disabled={loadingGenerate}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
-                style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.28)", color: "#22d3ee" }}
-              >
-                {loadingGenerate && (
-                  <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
-                {loadingGenerate ? "Generating..." : "✦ Generate progression"}
-              </button>
-              <p className="text-xs font-mono px-1" style={{ color: "#9ca3af" }}>Creates a full 4-chord progression from your style</p>
-            </div>
-          </div>
+          <button
+            onClick={handleGenerate} disabled={loadingGenerate}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
+            style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.28)", color: "#22d3ee" }}
+          >
+            {loadingGenerate && (
+              <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {loadingGenerate ? "Generating..." : "✦ Generate progression"}
+          </button>
         </div>
       </div>
 
       {error && <p className="text-sm px-1" style={{ color: "#f87171" }}>{error}</p>}
-
-      {suggestions.length > 0 && <SuggestionPanel suggestions={suggestions} />}
 
       {generationResult && editedProgression.length > 0 && (
         <div

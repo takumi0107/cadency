@@ -52,6 +52,7 @@ export interface StyleInput {
   key: string;
   mood: string;
   tempo: number;
+  energy?: number;
 }
 
 export interface GenerationResult {

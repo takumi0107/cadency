@@ -6,7 +6,7 @@ import { AnalysisResult, AuthUser, analyzeTrack } from "@/lib/api";
 
 interface URLAnalyzerProps {
   user: AuthUser | null;
-  onUseStyle: (styleContext: string, key: string) => void;
+  onUseStyle: (styleContext: string, key: string, energy: number) => void;
   onUsed: () => void;
 }
 
@@ -34,7 +34,11 @@ export default function URLAnalyzer({ user, onUseStyle, onUsed }: URLAnalyzerPro
 
   const handleUseStyle = () => {
     if (!result) return;
-    onUseStyle(`${result.mood}, ${result.tempo} BPM, ${result.key} ${result.scale}`, `${result.key} ${result.scale}`);
+    onUseStyle(
+      `${result.mood}, ${result.tempo} BPM, ${result.key} ${result.scale}`,
+      `${result.key} ${result.scale}`,
+      result.energy,
+    );
   };
 
   return (

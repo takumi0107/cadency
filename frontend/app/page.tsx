@@ -12,6 +12,7 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export default function Home() {
   const [prefillStyle, setPrefillStyle] = useState("");
   const [prefillKey, setPrefillKey] = useState("");
+  const [prefillEnergy, setPrefillEnergy] = useState<number | undefined>(undefined);
   const [savedTrigger, setSavedTrigger] = useState(0);
   const [loadedProgression, setLoadedProgression] = useState<SavedProgression | null>(null);
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
@@ -102,7 +103,7 @@ export default function Home() {
               />
               <URLAnalyzer
                 user={user}
-                onUseStyle={(style, key) => { setPrefillStyle(style); setPrefillKey(key); }}
+                onUseStyle={(style, key, energy) => { setPrefillStyle(style); setPrefillKey(key); setPrefillEnergy(energy); }}
                 onUsed={refreshUser}
               />
             </section>
@@ -117,6 +118,7 @@ export default function Home() {
               <ChordInput
                 prefillStyle={prefillStyle}
                 prefillKey={prefillKey}
+                prefillEnergy={prefillEnergy}
                 loadedProgression={loadedProgression}
                 onSaved={() => setSavedTrigger(t => t + 1)}
                 onUsed={refreshUser}

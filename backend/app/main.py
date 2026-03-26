@@ -301,6 +301,7 @@ async def generate(request: GenerateRequest, _: User = Depends(require_quota)):
             key=request.style.get("key", "C major"),
             mood=request.style.get("mood", "neutral"),
             tempo=request.style.get("tempo", 120),
+            **( {"energy": float(request.style["energy"])} if "energy" in request.style else {} ),
         )
         result: GenerationResult = generate_progression(style=style, length=request.length)
         return GenerateResponse(**result.model_dump())
