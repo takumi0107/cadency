@@ -224,53 +224,73 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
   return (
     <div className="space-y-4">
       <div
-        className="p-5 rounded-xl space-y-3"
-        style={{ border: "1px solid rgba(96,165,250,0.28)", background: "rgba(30,58,138,0.07)", borderRadius: "12px" }}
+        className="rounded-xl overflow-hidden"
+        style={{ border: "1px solid rgba(34,211,238,0.2)", background: "rgba(34,211,238,0.03)" }}
       >
-        <h2 className="text-xs font-mono uppercase tracking-widest" style={{ color: "#9ca3af" }}>
-          Chord Assistant
-        </h2>
+        <div className="p-4 space-y-3">
+          {/* Fields */}
+          <div className="space-y-2">
+            <label className="text-xs font-mono" style={{ color: "#9ca3af" }}>
+              Your chords <span style={{ color: "#9ca3af" }}>— type a progression to get "what fits next" suggestions</span>
+            </label>
+            <input
+              type="text" value={progression} onChange={(e) => setProgression(e.target.value)}
+              placeholder="e.g.  Am  F  C  G"
+              className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
+              style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(34,211,238,0.15)", color: "#f9fafb" }}
+            />
+          </div>
 
-        <input
-          type="text" value={progression} onChange={(e) => setProgression(e.target.value)}
-          placeholder="Enter your progression (e.g. Am F C)"
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-          style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(96,165,250,0.2)", color: "#f9fafb" }}
-        />
-        <input
-          type="text" value={key} onChange={(e) => setKey(e.target.value)}
-          placeholder="Key (e.g. A minor)"
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-          style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(96,165,250,0.2)", color: "#f9fafb" }}
-        />
-        <input
-          type="text" value={styleContext} onChange={(e) => setStyleContext(e.target.value)}
-          placeholder="Style context (e.g. lo-fi, melancholic)"
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-          style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(96,165,250,0.2)", color: "#f9fafb" }}
-        />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-mono" style={{ color: "#9ca3af" }}>Key</label>
+              <input
+                type="text" value={key} onChange={(e) => setKey(e.target.value)}
+                placeholder="e.g.  A minor"
+                className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
+                style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(34,211,238,0.15)", color: "#f9fafb" }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-mono" style={{ color: "#9ca3af" }}>Style / vibe</label>
+              <input
+                type="text" value={styleContext} onChange={(e) => setStyleContext(e.target.value)}
+                placeholder="e.g.  lo-fi, melancholic"
+                className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
+                style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(34,211,238,0.15)", color: "#f9fafb" }}
+              />
+            </div>
+          </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={handleSuggest} disabled={loadingSuggest || !progression.trim()}
-            className="flex-1 px-3 py-2 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
-            style={{ background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.4)", color: "#60a5fa" }}
-          >
-            {loadingSuggest ? "Thinking..." : "What fits next?"}
-          </button>
-          <button
-            onClick={handleGenerate} disabled={loadingGenerate}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
-            style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.3)", color: "#22d3ee" }}
-          >
-            {loadingGenerate && (
-              <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            )}
-            {loadingGenerate ? "Generating..." : "Generate progression"}
-          </button>
+          {/* Actions */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="space-y-1">
+              <button
+                onClick={handleSuggest} disabled={loadingSuggest || !progression.trim()}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
+                style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa" }}
+              >
+                {loadingSuggest ? "Thinking..." : "What fits next?"}
+              </button>
+              <p className="text-xs font-mono px-1" style={{ color: "#9ca3af" }}>AI suggests 3 chords that follow your progression</p>
+            </div>
+            <div className="space-y-1">
+              <button
+                onClick={handleGenerate} disabled={loadingGenerate}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-mono transition-all duration-200 disabled:opacity-40"
+                style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.28)", color: "#22d3ee" }}
+              >
+                {loadingGenerate && (
+                  <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                )}
+                {loadingGenerate ? "Generating..." : "✦ Generate progression"}
+              </button>
+              <p className="text-xs font-mono px-1" style={{ color: "#9ca3af" }}>Creates a full 4-chord progression from your style</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -381,7 +401,7 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", onSaved
                 className="px-2 py-1 rounded text-xs font-mono transition-all"
                 style={{
                   background: sound === preset ? "rgba(96,165,250,0.18)" : "transparent",
-                  border: `1px solid ${sound === preset ? "rgba(96,165,250,0.5)" : "rgba(96,165,250,0.15)"}`,
+                  border: `1px solid ${sound === preset ? "rgba(96,165,250,0.5)" : "rgba(34,211,238,0.15)"}`,
                   color: sound === preset ? "#60a5fa" : "#6b7280",
                 }}
               >

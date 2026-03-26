@@ -122,7 +122,7 @@ export default function PianoRoll({ chords, customNotes, playingIndex, onTranspo
               display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 5,
             }}>
               {row.semitone === 0 && (
-                <span style={{ fontSize: 9, color: "#4b5563", fontFamily: "monospace" }}>
+                <span style={{ fontSize: 9, color: "#9ca3af", fontFamily: "monospace" }}>
                   C{row.octave}
                 </span>
               )}
@@ -204,7 +204,7 @@ export default function PianoRoll({ chords, customNotes, playingIndex, onTranspo
       </div>
 
       {onTransposeNote && (
-        <p className="text-center py-1 text-xs font-mono" style={{ color: "#374151", borderTop: "1px solid rgba(96,165,250,0.08)" }}>
+        <p className="text-center py-1 text-xs font-mono" style={{ color: "#6b7280", borderTop: "1px solid rgba(96,165,250,0.08)" }}>
           drag individual notes ↑↓ to edit · ✦ = customized
         </p>
       )}

@@ -14,10 +14,9 @@ export default function Home() {
   const [prefillKey, setPrefillKey] = useState("");
   const [savedTrigger, setSavedTrigger] = useState(0);
   const [loadedProgression, setLoadedProgression] = useState<SavedProgression | null>(null);
-  const [user, setUser] = useState<AuthUser | null | undefined>(undefined); // undefined = loading
+  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
 
   useEffect(() => {
-    // Pick up session token from URL after OAuth redirect (Safari cross-origin cookie fix)
     const params = new URLSearchParams(window.location.search);
     const sid = params.get("sid");
     if (sid) {
@@ -27,15 +26,14 @@ export default function Home() {
     getMe().then(setUser);
   }, []);
 
+  const refreshUser = () => getMe().then(setUser);
+
   const handleLoad = (prog: SavedProgression) => {
     setLoadedProgression(prog);
     setPrefillKey(prog.key);
     setPrefillStyle(prog.mood);
   };
 
-  const refreshUser = () => getMe().then(setUser);
-
-  // Loading state
   if (user === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#07070f" }}>
@@ -46,48 +44,93 @@ export default function Home() {
 
   return (
     <main className="min-h-screen relative" style={{ background: "#07070f", color: "#f9fafb" }}>
+      {/* Grid */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(96,165,250,0.6) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,0.6) 1px,transparent 1px)",
+            "linear-gradient(rgba(96,165,250,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(96,165,250,0.5) 1px,transparent 1px)",
           backgroundSize: "48px 48px",
           opacity: 0.04,
         }}
       />
+      {/* Colorful ambient glows */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div style={{ position: "absolute", top: -100, left: "20%", width: 500, height: 400, background: "radial-gradient(ellipse, rgba(139,92,246,0.12) 0%, transparent 70%)" }} />
+        <div style={{ position: "absolute", top: 100, right: "10%", width: 400, height: 300, background: "radial-gradient(ellipse, rgba(34,211,238,0.08) 0%, transparent 70%)" }} />
+        <div style={{ position: "absolute", bottom: 200, left: "5%", width: 350, height: 300, background: "radial-gradient(ellipse, rgba(244,114,182,0.07) 0%, transparent 70%)" }} />
+      </div>
 
       <div className="relative z-10 max-w-3xl mx-auto px-4 py-10 sm:px-6">
-        <header className="mb-10 flex items-start justify-between">
+        {/* Header */}
+        <header className="mb-12 flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h1 className="text-3xl font-mono font-bold tracking-widest" style={{ color: "#f9fafb" }}>
-                CADENCY
-              </h1>
-              <span className="w-2 h-2 rounded-full" style={{ background: "#22d3ee" }} />
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full" style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#a78bfa" }}>
+                AI Music Tool
+              </span>
             </div>
-            <p className="text-sm font-mono" style={{ color: "#9ca3af" }}>AI chord assistant</p>
+            <h1
+              className="text-4xl font-mono font-bold tracking-widest mb-1"
+              style={{
+                background: "linear-gradient(90deg, #f9fafb 0%, #a78bfa 60%, #22d3ee 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              CADENCY
+            </h1>
+            <p className="text-sm font-mono" style={{ color: "#6b7280" }}>
+              Analyze tracks · Generate chord progressions · Export MIDI
+            </p>
           </div>
           {user && <AuthButton user={user} onLogout={() => setUser(null)} />}
         </header>
 
         {!user ? (
-          <SignInGate onSignedIn={refreshUser} />
+          <SignInGate />
         ) : (
-          <div className="space-y-6">
-            <WelcomeBanner name={user.name.split(" ")[0]} used={user.usage_today} limit={user.usage_limit} />
-            <URLAnalyzer
-              user={user}
-              onUseStyle={(style, key) => { setPrefillStyle(style); setPrefillKey(key); }}
-              onUsed={refreshUser}
-            />
-            <ChordInput
-              prefillStyle={prefillStyle}
-              prefillKey={prefillKey}
-              loadedProgression={loadedProgression}
-              onSaved={() => setSavedTrigger(t => t + 1)}
-              onUsed={refreshUser}
-            />
-            <SavedProgressions onLoad={handleLoad} refreshTrigger={savedTrigger} />
+          <div className="space-y-10">
+            <UsageBar used={user.usage_today} limit={user.usage_limit} name={user.name.split(" ")[0]} />
+
+            <section className="space-y-3">
+              <SectionHeader
+                step={1}
+                color="#a78bfa"
+                title="Analyze any YouTube track"
+                desc="Paste a URL — Cadency extracts the key, mood, and tempo using AI, then pre-fills your chord workspace."
+              />
+              <URLAnalyzer
+                user={user}
+                onUseStyle={(style, key) => { setPrefillStyle(style); setPrefillKey(key); }}
+                onUsed={refreshUser}
+              />
+            </section>
+
+            <section className="space-y-3">
+              <SectionHeader
+                step={2}
+                color="#22d3ee"
+                title="Build your chord progression"
+                desc="Generate a fresh progression from scratch, or type your own chords and ask AI what fits next."
+              />
+              <ChordInput
+                prefillStyle={prefillStyle}
+                prefillKey={prefillKey}
+                loadedProgression={loadedProgression}
+                onSaved={() => setSavedTrigger(t => t + 1)}
+                onUsed={refreshUser}
+              />
+            </section>
+
+            <section className="space-y-3">
+              <SectionHeader
+                color="#f472b6"
+                title="Your saved progressions"
+                desc="All generated progressions live here. Load any to keep editing, export, or play back."
+              />
+              <SavedProgressions onLoad={handleLoad} refreshTrigger={savedTrigger} />
+            </section>
           </div>
         )}
       </div>
@@ -95,7 +138,62 @@ export default function Home() {
   );
 }
 
-function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
+// ---------------------------------------------------------------------------
+
+function SectionHeader({ step, color, title, desc }: { step?: number; color: string; title: string; desc: string }) {
+  return (
+    <div className="flex gap-3 items-start">
+      {step !== undefined && (
+        <span
+          className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-bold mt-0.5"
+          style={{
+            background: `${color}18`,
+            border: `1px solid ${color}50`,
+            color,
+          }}
+        >
+          {step}
+        </span>
+      )}
+      <div>
+        <p className="text-sm font-mono font-semibold" style={{ color: "#e5e7eb" }}>{title}</p>
+        <p className="text-xs font-mono mt-0.5" style={{ color: "#6b7280" }}>{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function UsageBar({ used, limit, name }: { used: number; limit: number; name: string }) {
+  const remaining = limit - used;
+  const pct = (used / limit) * 100;
+  const low = remaining <= 5;
+  return (
+    <div
+      className="flex items-center gap-4 px-4 py-3 rounded-xl"
+      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}
+    >
+      <p className="text-sm font-mono shrink-0" style={{ color: "#9ca3af" }}>
+        Hey, <span style={{ color: "#f9fafb" }}>{name}</span>
+      </p>
+      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${pct}%`,
+            background: low
+              ? "#f87171"
+              : "linear-gradient(90deg, #a78bfa, #22d3ee)",
+          }}
+        />
+      </div>
+      <p className="text-xs font-mono shrink-0" style={{ color: low ? "#f87171" : "#6b7280" }}>
+        {remaining} / {limit} left
+      </p>
+    </div>
+  );
+}
+
+function SignInGate() {
   const handleLogin = async () => {
     const res = await fetch(`${BASE}/auth/google`, { credentials: "include" });
     const { url } = await res.json();
@@ -103,70 +201,64 @@ function SignInGate({ onSignedIn }: { onSignedIn: () => void }) {
   };
 
   return (
-    <div className="flex flex-col items-center text-center py-16 space-y-8">
-      <div className="space-y-3">
-        <p className="text-2xl font-mono font-semibold" style={{ color: "#f9fafb" }}>
-          Your AI music companion
+    <div className="flex flex-col items-center text-center py-16 space-y-10">
+      <div className="space-y-4">
+        <p className="text-4xl font-mono font-bold leading-tight">
+          <span style={{ color: "#f9fafb" }}>Hear a song.</span>
+          <br />
+          <span
+            style={{
+              background: "linear-gradient(90deg, #a78bfa, #22d3ee)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Decode its chords.
+          </span>
         </p>
-        <p className="text-sm font-mono max-w-sm" style={{ color: "#6b7280" }}>
-          Analyze any YouTube track, generate chord progressions, and build your musical ideas — all in one place.
+        <p className="text-sm font-mono max-w-sm mx-auto leading-relaxed" style={{ color: "#6b7280" }}>
+          Paste any YouTube URL to extract its musical DNA, then use AI to generate chord progressions in the same style. Export as MIDI and drop into your DAW.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-lg text-left">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-lg text-left">
         {[
-          { icon: "♫", title: "Analyze tracks", desc: "Paste a YouTube URL → get key, mood & tempo instantly" },
-          { icon: "✦", title: "Generate chords", desc: "AI builds progressions that match your style and vibe" },
-          { icon: "↓", title: "Export MIDI", desc: "Download your progressions as MIDI files" },
+          { step: "01", title: "Analyze a track", desc: "AI reads the key, mood & tempo from any YouTube song", color: "#a78bfa" },
+          { step: "02", title: "Generate chords", desc: "One click creates a progression matching that exact style", color: "#22d3ee" },
+          { step: "03", title: "Export MIDI", desc: "Drop it straight into Ableton, FL Studio, or Logic", color: "#f472b6" },
         ].map(f => (
           <div
-            key={f.title}
-            className="p-4 rounded-xl space-y-1"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+            key={f.step}
+            className="p-4 rounded-xl space-y-2"
+            style={{
+              background: `${f.color}08`,
+              border: `1px solid ${f.color}25`,
+            }}
           >
-            <span className="text-lg" style={{ color: "#22d3ee" }}>{f.icon}</span>
+            <span className="text-xs font-mono" style={{ color: `${f.color}80` }}>{f.step}</span>
             <p className="text-xs font-mono font-semibold" style={{ color: "#e5e7eb" }}>{f.title}</p>
-            <p className="text-xs font-mono" style={{ color: "#6b7280" }}>{f.desc}</p>
+            <p className="text-xs font-mono leading-relaxed" style={{ color: "#9ca3af" }}>{f.desc}</p>
           </div>
         ))}
       </div>
 
-      <button
-        onClick={handleLogin}
-        className="flex items-center gap-3 px-6 py-3 rounded-xl font-mono text-sm font-medium transition-all duration-200 hover:scale-105"
-        style={{
-          background: "rgba(255,255,255,0.08)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          color: "#f9fafb",
-        }}
-      >
-        <GoogleIcon />
-        Sign in with Google
-      </button>
-
-      <p className="text-xs font-mono" style={{ color: "#374151" }}>
-        20 free uses per day · No credit card required
-      </p>
-    </div>
-  );
-}
-
-function WelcomeBanner({ name, used, limit }: { name: string; used: number; limit: number }) {
-  const remaining = limit - used;
-  return (
-    <div
-      className="flex items-center justify-between px-4 py-3 rounded-xl"
-      style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.15)" }}
-    >
-      <p className="text-sm font-mono" style={{ color: "#e5e7eb" }}>
-        Welcome back, <span style={{ color: "#22d3ee" }}>{name}</span>
-      </p>
-      <p
-        className="text-xs font-mono"
-        style={{ color: remaining <= 5 ? "#f87171" : "#6b7280" }}
-      >
-        {remaining}/{limit} uses remaining today
-      </p>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          onClick={handleLogin}
+          className="flex items-center gap-3 px-7 py-3.5 rounded-xl font-mono text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+          style={{
+            background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(34,211,238,0.15))",
+            border: "1px solid rgba(139,92,246,0.4)",
+            color: "#f9fafb",
+          }}
+        >
+          <GoogleIcon />
+          Continue with Google
+        </button>
+        <p className="text-xs font-mono" style={{ color: "#6b7280" }}>
+          Free · 20 uses per day · No credit card
+        </p>
+      </div>
     </div>
   );
 }
