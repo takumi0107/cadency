@@ -152,10 +152,16 @@ async def auth_debug():
 
 
 @app.get("/auth/google")
-async def auth_google(response: Response):
+async def auth_google(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    cadency_sid: str | None = Cookie(default=None),
+):
     """Return the Google OAuth URL — frontend navigates there directly."""
     state = secrets.token_urlsafe(16)
-    response.set_cookie("oauth_state", state, max_age=600, httponly=True, samesite="none", secure=True)
+    db_session = await get_or_create_session(response, db, cadency_sid)
+    db_session.oauth_state = state
+    await db.commit()
     return {"url": get_oauth_url(state)}
 
 
@@ -166,11 +172,12 @@ async def auth_google_callback(
     response: Response,
     db: AsyncSession = Depends(get_db),
     cadency_sid: str | None = Cookie(default=None),
-    oauth_state: str | None = Cookie(default=None),
 ):
     """Handle Google OAuth callback, create/update user, link to session."""
-    if not oauth_state or state != oauth_state:
+    db_session = await get_or_create_session(response, db, cadency_sid)
+    if not db_session.oauth_state or state != db_session.oauth_state:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    db_session.oauth_state = None  # consume the state
 
     try:
         tokens = exchange_code(code)
@@ -186,14 +193,11 @@ async def auth_google_callback(
         avatar_url=user_info.get("picture"),
     )
 
-    db_session = await get_or_create_session(response, db, cadency_sid)
     db_session.user_id = user.id
     await db.commit()
 
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    redirect = RedirectResponse(url=frontend_url)
-    redirect.delete_cookie("oauth_state")
-    return redirect
+    return RedirectResponse(url=frontend_url)
 
 
 @app.get("/auth/me")
