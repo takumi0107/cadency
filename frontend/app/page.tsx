@@ -94,44 +94,65 @@ export default function Home() {
           <div className="space-y-10">
             <UsageBar used={user.usage_today} limit={user.usage_limit} name={user.name.split(" ")[0]} />
 
-            <section className="space-y-3">
-              <SectionHeader
-                step={1}
-                color="#a78bfa"
-                title="Analyze any YouTube track"
-                desc="Paste a URL — Cadency extracts the key, mood, and tempo using AI, then pre-fills your chord workspace."
-              />
-              <URLAnalyzer
-                user={user}
-                onUseStyle={(style, key, energy) => { setPrefillStyle(style); setPrefillKey(key); setPrefillEnergy(energy); }}
-                onUsed={refreshUser}
-              />
+            <section
+              className="rounded-2xl overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+            >
+              <div className="px-5 pt-5 pb-4">
+                <SectionHeader
+                  step={1}
+                  color="#a78bfa"
+                  title="Analyze any YouTube track"
+                  desc="Paste a URL — Cadency extracts the key, mood, and tempo using AI, then pre-fills your chord workspace."
+                />
+              </div>
+              <div className="px-4 pb-4">
+                <URLAnalyzer
+                  user={user}
+                  onUseStyle={(style, key, energy) => { setPrefillStyle(style); setPrefillKey(key); setPrefillEnergy(energy); }}
+                  onUsed={refreshUser}
+                />
+              </div>
             </section>
 
-            <section className="space-y-3">
-              <SectionHeader
-                step={2}
-                color="#22d3ee"
-                title="Build your chord progression"
-                desc="Generate a fresh progression from scratch, or type your own chords and ask AI what fits next."
-              />
-              <ChordInput
-                prefillStyle={prefillStyle}
-                prefillKey={prefillKey}
-                prefillEnergy={prefillEnergy}
-                loadedProgression={loadedProgression}
-                onSaved={() => setSavedTrigger(t => t + 1)}
-                onUsed={refreshUser}
-              />
+            <section
+              className="rounded-2xl overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+            >
+              <div className="px-5 pt-5 pb-4">
+                <SectionHeader
+                  step={2}
+                  color="#22d3ee"
+                  title="Build your chord progression"
+                  desc="Generate a fresh progression from scratch, or type your own chords and ask AI what fits next."
+                />
+              </div>
+              <div className="px-4 pb-4">
+                <ChordInput
+                  prefillStyle={prefillStyle}
+                  prefillKey={prefillKey}
+                  prefillEnergy={prefillEnergy}
+                  loadedProgression={loadedProgression}
+                  onSaved={() => setSavedTrigger(t => t + 1)}
+                  onUsed={refreshUser}
+                />
+              </div>
             </section>
 
-            <section className="space-y-3">
-              <SectionHeader
-                color="#f472b6"
-                title="Your saved progressions"
-                desc="All generated progressions live here. Load any to keep editing, export, or play back."
-              />
-              <SavedProgressions onLoad={handleLoad} refreshTrigger={savedTrigger} />
+            <section
+              className="rounded-2xl overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+            >
+              <div className="px-5 pt-5 pb-4">
+                <SectionHeader
+                  color="#f472b6"
+                  title="Your saved progressions"
+                  desc="All generated progressions live here. Load any to keep editing, export, or play back."
+                />
+              </div>
+              <div className="px-4 pb-4">
+                <SavedProgressions onLoad={handleLoad} refreshTrigger={savedTrigger} />
+              </div>
             </section>
           </div>
         )}
@@ -158,8 +179,8 @@ function SectionHeader({ step, color, title, desc }: { step?: number; color: str
         </span>
       )}
       <div>
-        <p className="text-sm font-mono font-semibold" style={{ color: "#e5e7eb" }}>{title}</p>
-        <p className="text-xs font-mono mt-0.5" style={{ color: "#6b7280" }}>{desc}</p>
+        <p className="text-sm font-mono font-semibold" style={{ color: "#ffffff" }}>{title}</p>
+        <p className="text-xs font-mono mt-1 leading-relaxed" style={{ color: "#d1d5db" }}>{desc}</p>
       </div>
     </div>
   );

@@ -217,10 +217,11 @@ export default function ChordInput({ prefillStyle = "", prefillKey = "", prefill
             </div>
             <div className="space-y-1">
               <label className="text-xs font-mono" style={{ color: "#9ca3af" }}>Style / vibe</label>
-              <input
-                type="text" value={styleContext} onChange={(e) => setStyleContext(e.target.value)}
+              <textarea
+                value={styleContext} onChange={(e) => setStyleContext(e.target.value)}
                 placeholder="e.g.  lo-fi, melancholic"
-                className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none"
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg text-sm font-mono outline-none resize-none"
                 style={{ background: "rgba(7,7,15,0.8)", border: "1px solid rgba(34,211,238,0.15)", color: "#f9fafb" }}
               />
             </div>
