@@ -15,7 +15,7 @@ export default function Home() {
   const [prefillEnergy, setPrefillEnergy] = useState<number | undefined>(undefined);
   const [savedTrigger, setSavedTrigger] = useState(0);
   const [loadedProgression, setLoadedProgression] = useState<SavedProgression | null>(null);
-  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -24,24 +24,16 @@ export default function Home() {
       saveAuthToken(sid);
       window.history.replaceState({}, "", window.location.pathname);
     }
-    getMe().then(setUser);
+    getMe().then(u => setUser(u ?? null));
   }, []);
 
-  const refreshUser = () => getMe().then(setUser);
+  const refreshUser = () => getMe().then(u => setUser(u ?? null));
 
   const handleLoad = (prog: SavedProgression) => {
     setLoadedProgression(prog);
     setPrefillKey(prog.key);
     setPrefillStyle(prog.mood);
   };
-
-  if (user === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#07070f" }}>
-        <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#22d3ee" }} />
-      </div>
-    );
-  }
 
   return (
     <main className="min-h-screen relative" style={{ background: "#07070f", color: "#f9fafb" }}>
@@ -88,12 +80,7 @@ export default function Home() {
           {user && <AuthButton user={user} onLogout={() => setUser(null)} />}
         </header>
 
-        {!user ? (
-          <SignInGate />
-        ) : (
-          <div className="space-y-10">
-            <UsageBar used={user.usage_today} limit={user.usage_limit} name={user.name.split(" ")[0]} />
-
+        <div className="space-y-10">
             <section
               className="rounded-2xl overflow-hidden"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
@@ -108,9 +95,7 @@ export default function Home() {
               </div>
               <div className="px-4 pb-4">
                 <URLAnalyzer
-                  user={user}
                   onUseStyle={(style, key, energy) => { setPrefillStyle(style); setPrefillKey(key); setPrefillEnergy(energy); }}
-                  onUsed={refreshUser}
                 />
               </div>
             </section>
@@ -155,7 +140,6 @@ export default function Home() {
               </div>
             </section>
           </div>
-        )}
       </div>
     </main>
   );
@@ -182,36 +166,6 @@ function SectionHeader({ step, color, title, desc }: { step?: number; color: str
         <p className="text-sm font-mono font-semibold" style={{ color: "#ffffff" }}>{title}</p>
         <p className="text-xs font-mono mt-1 leading-relaxed" style={{ color: "#d1d5db" }}>{desc}</p>
       </div>
-    </div>
-  );
-}
-
-function UsageBar({ used, limit, name }: { used: number; limit: number; name: string }) {
-  const remaining = limit - used;
-  const pct = (used / limit) * 100;
-  const low = remaining <= 5;
-  return (
-    <div
-      className="flex items-center gap-4 px-4 py-3 rounded-xl"
-      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}
-    >
-      <p className="text-sm font-mono shrink-0" style={{ color: "#9ca3af" }}>
-        Hey, <span style={{ color: "#f9fafb" }}>{name}</span>
-      </p>
-      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${pct}%`,
-            background: low
-              ? "#f87171"
-              : "linear-gradient(90deg, #a78bfa, #22d3ee)",
-          }}
-        />
-      </div>
-      <p className="text-xs font-mono shrink-0" style={{ color: low ? "#f87171" : "#6b7280" }}>
-        {remaining} / {limit} left
-      </p>
     </div>
   );
 }

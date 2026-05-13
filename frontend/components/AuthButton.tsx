@@ -13,8 +13,6 @@ export default function AuthButton({ user, onLogout }: AuthButtonProps) {
     onLogout();
   };
 
-  const remaining = user.usage_limit - user.usage_today;
-
   return (
     <div className="flex items-center gap-3">
       {user.avatar_url && (

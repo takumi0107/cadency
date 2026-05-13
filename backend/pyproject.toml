@@ -13,6 +13,10 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.19",
     "alembic>=1.13",
+    "yt-dlp>=2024.1.0",
+    "librosa>=0.10",
+    "numpy>=1.26",
+    "soundfile>=0.12",
 ]
 
 [dependency-groups]

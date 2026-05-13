@@ -1,11 +1,14 @@
-"""YouTube metadata fetch using YouTube Data API v3 + Gemini-based analysis."""
+"""YouTube audio download via yt-dlp + librosa-based analysis."""
 
-import json
+import glob
 import os
 import re
+import tempfile
 from typing import TypedDict
 
-import httpx
+import librosa
+import numpy as np
+import yt_dlp
 
 
 class AnalysisResult(TypedDict):
@@ -17,95 +20,118 @@ class AnalysisResult(TypedDict):
     mood: str
 
 
-def _fetch_video_metadata(video_id: str) -> dict:
-    """Fetch video snippet from YouTube Data API v3."""
-    api_key = os.environ.get("YOUTUBE_API_KEY")
-    if not api_key:
-        raise RuntimeError("YOUTUBE_API_KEY environment variable not set")
+# Krumhansl-Schmuckler key profiles
+_MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+_MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 
-    resp = httpx.get(
-        "https://www.googleapis.com/youtube/v3/videos",
-        params={"part": "snippet", "id": video_id, "key": api_key},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    items = resp.json().get("items", [])
-    if not items:
-        raise RuntimeError(f"Video not found: {video_id}")
-    return items[0]["snippet"]
+_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
-def _analyze_with_gemini(title: str, description: str, tags: list[str]) -> dict:
-    """Use Gemini to infer key, scale, tempo, energy, and mood from metadata."""
+def _detect_key(y: np.ndarray, sr: int) -> tuple[str, str]:
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    mean_chroma = chroma.mean(axis=1)
+
+    best_score = -np.inf
+    best_key = "C"
+    best_scale = "Ionian"
+
+    for i in range(12):
+        rotated = np.roll(mean_chroma, -i)
+        major_score = np.corrcoef(rotated, _MAJOR_PROFILE)[0, 1]
+        minor_score = np.corrcoef(rotated, _MINOR_PROFILE)[0, 1]
+
+        if major_score > best_score:
+            best_score = major_score
+            best_key = _NOTE_NAMES[i]
+            best_scale = "Ionian"
+
+        if minor_score > best_score:
+            best_score = minor_score
+            best_key = _NOTE_NAMES[i]
+            best_scale = "Aeolian"
+
+    return best_key, best_scale
+
+
+def _detect_tempo(y: np.ndarray, sr: int) -> float:
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    return float(np.atleast_1d(tempo)[0])
+
+
+def _detect_energy(y: np.ndarray) -> float:
+    rms = librosa.feature.rms(y=y)[0]
+    # Normalize: typical RMS values are 0.01–0.3
+    return float(min(1.0, np.mean(rms) / 0.3))
+
+
+def _detect_mood(title: str, key: str, scale: str, tempo: float, energy: float) -> str:
+    """Use Gemini to infer mood from measured audio characteristics + title."""
     from google import genai
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    tags_str = ", ".join(tags[:20]) if tags else "none"
+    scale_name = "major" if scale == "Ionian" else "minor"
 
-    prompt = f"""You are a music analysis expert. Based on the YouTube video metadata below, determine the musical characteristics of the song.
+    prompt = f"""You are a music expert. Based on these audio analysis results, describe the mood in 2-4 words.
 
 Title: {title}
-Description (first 500 chars): {description[:500]}
-Tags: {tags_str}
+Key: {key} {scale_name}
+Tempo: {tempo:.0f} BPM
+Energy: {energy:.2f} (0=silent, 1=very loud)
 
-Return ONLY a JSON object with these exact fields:
-- key: root note as a string (e.g. "C", "F#", "Bb")
-- scale: "Ionian" for major keys, "Aeolian" for minor keys
-- tempo: estimated BPM as a number (e.g. 120.0)
-- energy: estimated energy level from 0.0 to 1.0
-- mood: a short mood description (e.g. "melancholic", "upbeat & energetic", "calm & warm", "dark & heavy")
+Return ONLY a mood phrase, e.g. "melancholic", "upbeat & energetic", "calm & warm", "dark & heavy". No explanation."""
 
-Base your analysis on:
-- Song title keywords (minor, major, sad, happy, dark, ambient, etc.)
-- Genre cues in title/tags (trap, jazz, lo-fi, EDM, classical, etc.)
-- Artist style if recognizable from the title or channel
-- Any musical key or BPM mentioned in the title, description, or tags
-
-Return only valid JSON, no markdown, no explanation."""
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-    )
-
-    text = response.text.strip()
-    # Strip markdown code fences if present
-    text = re.sub(r"^```(?:json)?\n?", "", text)
-    text = re.sub(r"\n?```$", "", text)
-    return json.loads(text)
+    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    return response.text.strip().strip('"').strip("'")
 
 
 def analyze_youtube_url(url: str, on_progress=None) -> AnalysisResult:
-    """
-    Fetch YouTube metadata and use Gemini to determine key/mood/tempo.
-    on_progress(status, data) is called at each step if provided.
-    """
+    """Download YouTube audio with yt-dlp, analyze with librosa, infer mood with Gemini."""
     def _emit(status: str, data=None):
         print(f"[analyze] {status}: {data}", flush=True)
         if on_progress:
             on_progress(status, data)
 
-    m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
-    if not m:
+    if not re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url):
         raise ValueError(f"Invalid YouTube URL: {url}")
-    video_id = m.group(1)
 
-    _emit("fetching", url)
-    snippet = _fetch_video_metadata(video_id)
-    title: str = snippet.get("title", "Unknown Track")
-    description: str = snippet.get("description", "")
-    tags: list[str] = snippet.get("tags", [])
-    _emit("fetched", title)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": os.path.join(tmpdir, "audio.%(ext)s"),
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
+            "quiet": True,
+            "no_warnings": True,
+        }
 
-    _emit("analyzing", title)
-    analysis = _analyze_with_gemini(title, description, tags)
-    _emit("complete", title)
+        _emit("downloading", url)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            title: str = info.get("title", "Unknown Track")
+        _emit("downloaded", title)
+
+        wav_files = glob.glob(os.path.join(tmpdir, "*.wav"))
+        if not wav_files:
+            raise RuntimeError("Audio extraction failed: no WAV file produced by ffmpeg")
+        audio_path = wav_files[0]
+
+        _emit("analyzing", title)
+        # Load first 2 minutes — enough for key/tempo detection, faster than full track
+        y, sr = librosa.load(audio_path, sr=22050, mono=True, duration=120)
+
+        key, scale = _detect_key(y, sr)
+        tempo = _detect_tempo(y, sr)
+        energy = _detect_energy(y)
+        _emit("audio_analyzed", f"{key} {scale} @ {tempo:.0f} BPM, energy={energy:.2f}")
+
+        _emit("mood", title)
+        mood = _detect_mood(title, key, scale, tempo, energy)
+        _emit("complete", title)
 
     return AnalysisResult(
         title=title,
-        key=analysis.get("key", "C"),
-        scale=analysis.get("scale", "Ionian"),
-        tempo=float(analysis.get("tempo", 120.0)),
-        energy=float(analysis.get("energy", 0.5)),
-        mood=analysis.get("mood", "neutral"),
+        key=key,
+        scale=scale,
+        tempo=tempo,
+        energy=energy,
+        mood=mood,
     )

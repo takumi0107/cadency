@@ -1,30 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { AnalysisResult, AuthUser, analyzeTrack } from "@/lib/api";
+import { AnalysisResult, analyzeTrack } from "@/lib/api";
 
 
 interface URLAnalyzerProps {
-  user: AuthUser | null;
   onUseStyle: (styleContext: string, key: string, energy: number) => void;
-  onUsed: () => void;
 }
 
-export default function URLAnalyzer({ user, onUseStyle, onUsed }: URLAnalyzerProps) {
+export default function URLAnalyzer({ onUseStyle }: URLAnalyzerProps) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
-    if (!url.trim() || !user) return;
+    if (!url.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
       setResult(await analyzeTrack(url.trim()));
-      onUsed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
@@ -54,8 +51,7 @@ export default function URLAnalyzer({ user, onUseStyle, onUsed }: URLAnalyzerPro
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
           placeholder="https://youtube.com/watch?v=..."
-          disabled={!user}
-          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-all disabled:opacity-40"
+          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none transition-all"
           style={{
             background: "rgba(7,7,15,0.8)",
             border: "1px solid rgba(139,92,246,0.2)",
@@ -64,7 +60,7 @@ export default function URLAnalyzer({ user, onUseStyle, onUsed }: URLAnalyzerPro
         />
         <button
           onClick={handleAnalyze}
-          disabled={loading || !url.trim() || !user}
+          disabled={loading || !url.trim()}
           className="px-5 py-2 rounded-lg text-sm font-mono font-medium transition-all duration-200 disabled:opacity-40 shrink-0"
           style={{
             background: "rgba(139,92,246,0.18)",

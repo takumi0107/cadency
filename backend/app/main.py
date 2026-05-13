@@ -21,7 +21,7 @@ from app.ai.suggest import suggest_next_chord, SuggestionResult
 from app.ai.style_match import generate_progression, StyleInput, GenerationResult
 from app.auth.google import exchange_code, fetch_user_info, get_oauth_url
 from app.db.engine import init_db
-from app.db.deps import get_db, get_or_create_session, require_quota
+from app.db.deps import get_db, get_or_create_session
 from app.db.models import Session as DbSession, User
 from app.db import crud
 
@@ -250,7 +250,6 @@ async def analyze(
     response: Response,
     db: AsyncSession = Depends(get_db),
     cadency_sid: str | None = Cookie(default=None),
-    _: User = Depends(require_quota),
 ):
     """Fetch YouTube metadata and use Gemini to determine key/mood/tempo (cached by video ID)."""
     db_session = await get_or_create_session(response, db, cadency_sid)
@@ -280,7 +279,7 @@ async def analyze(
 # ---------------------------------------------------------------------------
 
 @app.post("/suggest", response_model=SuggestResponse)
-async def suggest(request: SuggestRequest, _: User = Depends(require_quota)):
+async def suggest(request: SuggestRequest):
     """Return 3 chord suggestions that fit after the given progression."""
     try:
         result: SuggestionResult = suggest_next_chord(
@@ -294,7 +293,7 @@ async def suggest(request: SuggestRequest, _: User = Depends(require_quota)):
 
 
 @app.post("/generate", response_model=GenerateResponse)
-async def generate(request: GenerateRequest, _: User = Depends(require_quota)):
+async def generate(request: GenerateRequest):
     """Generate a chord progression matching the given style."""
     try:
         style = StyleInput(

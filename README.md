@@ -2,7 +2,7 @@
 
 AI-powered chord assistant for music producers. Paste a YouTube link to analyze a track's harmonic style, then generate and edit chord progressions — complete with piano roll visualization, MIDI export, and sound playback.
 
-**Live demo:** <!-- add URL after deploy -->
+> **Run locally only.** Cadency downloads actual audio via yt-dlp to detect key, tempo, and energy from the real waveform. Cloud servers (Railway, Render, etc.) get blocked by YouTube's bot detection — this is intentional, not a bug.
 
 ---
 
@@ -73,12 +73,11 @@ Every generated progression is saved to a **per-session SQLite database** (cooki
 | Audio download | yt-dlp |
 | Audio analysis | librosa |
 | Music theory | music21 |
-| AI | Gemini 2.5 Flash |
+| AI (mood only) | Gemini 2.5 Flash |
 | Frontend | Next.js 15 + TypeScript |
 | Styling | Tailwind CSS |
 | Audio playback | Tone.js |
-| Deploy (backend) | Railway |
-| Deploy (frontend) | Vercel |
+| Hosting | Local only (YouTube blocks cloud IPs) |
 
 ---
 
@@ -273,13 +272,15 @@ Press `Ctrl+C` to stop both.
 
 **Backend** (`.env`):
 ```
-GEMINI_API_KEY=your-gemini-api-key
+GEMINI_API_KEY=your-gemini-api-key   # used only for mood detection
 ```
 
 **Frontend** (`.env.local`, optional):
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
+
+> No YouTube API key needed. Audio is downloaded directly via yt-dlp.
 
 ---
 
