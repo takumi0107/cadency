@@ -47,6 +47,7 @@ coverage/
 
 # Alembic
 alembic/__pycache__/
+alembic.ini
 
 # Misc
 .DS_Store
